@@ -1140,6 +1140,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "dia-batching-server"
+version = "0.1.0"
+
+[[package]]
 name = "dia-oracle"
 version = "0.1.0"
 dependencies = [

@@ -4,6 +4,7 @@ panic = 'unwind'
 [workspace]
 members = [
     'node',
+    "dia-batching-server",
     'pallets/dia-oracle',
     'runtime',
 ]
