@@ -117,13 +117,13 @@ pub mod pallet {
 		#[pallet::weight(10_000)]
 		pub fn add_currency(origin: OriginFor<T>, _currency: Vec<u8>) -> DispatchResult {
 			Pallet::<T>::check_origin_rights(origin)?;
-			todo!("Should check if the origin account is authorized and if it's ok, add given account_id to the authorized set")
+			todo!("Should check if the origin account is authorized and if it's ok, add given currency to the set")
 		}
 
 		#[pallet::weight(10_000)]
 		pub fn remove_currency(origin: OriginFor<T>, _currency: Vec<u8>) -> DispatchResult {
 			Pallet::<T>::check_origin_rights(origin)?;
-			todo!("Should check if the origin account is authorized and if it's ok, add given account_id to the authorized set")
+			todo!("Should check if the origin account is authorized and if it's ok, remove given currency from the set")
 		}
 
 		#[pallet::weight(10_000)]
