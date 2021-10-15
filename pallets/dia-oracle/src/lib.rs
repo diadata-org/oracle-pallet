@@ -30,6 +30,7 @@ pub mod pallet {
 	#[derive(Encode, Decode, scale_info::TypeInfo, Debug, Clone, PartialEq, Eq, Default)]
 	pub struct CoinInfo {
 		pub symbol: Vec<u8>,
+		pub name: Vec<u8>,
 		pub supply: u64,
 		pub last_update_timestamp: u64,
 		pub price: u64
@@ -54,7 +55,7 @@ pub mod pallet {
 	#[pallet::getter(fn supported_currencies)]
 	pub type SupportedCurrencies<T: Config> = StorageMap<_, Blake2_128Concat, Vec<u8>, ()>;
 
-	/// Map of all the coins to their respective info and price
+	/// Map of all the coins names to their respective info and price
 	#[pallet::storage]
 	#[pallet::getter(fn prices_map)]
 	pub type CoinInfosMap<T> = StorageMap<_, Blake2_128Concat, Vec<u8>, CoinInfo, ValueQuery>;
@@ -103,7 +104,7 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		fn update_prices() {
 			// Expected contract for the API with the server is supported currencies in URL path and
-			// json encoded HashMap<Vec<u8>, CoinInfo> as a result from the server
+			// json encoded Vec<CoinInfo> as a result from the server
 			todo!("Update prices information via Call::set_updated_coin_infos from the standalone server")
 		}
 
@@ -115,13 +116,13 @@ pub mod pallet {
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		#[pallet::weight(10_000)]
-		pub fn add_currency(origin: OriginFor<T>, _currency: Vec<u8>) -> DispatchResult {
+		pub fn add_currency(origin: OriginFor<T>, _currency_symbol: Vec<u8>) -> DispatchResult {
 			Pallet::<T>::check_origin_rights(origin)?;
 			todo!("Should check if the origin account is authorized and if it's ok, add given currency to the set")
 		}
 
 		#[pallet::weight(10_000)]
-		pub fn remove_currency(origin: OriginFor<T>, _currency: Vec<u8>) -> DispatchResult {
+		pub fn remove_currency(origin: OriginFor<T>, _currency_symbol: Vec<u8>) -> DispatchResult {
 			Pallet::<T>::check_origin_rights(origin)?;
 			todo!("Should check if the origin account is authorized and if it's ok, remove given currency from the set")
 		}
