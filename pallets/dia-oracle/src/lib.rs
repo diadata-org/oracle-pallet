@@ -82,6 +82,8 @@ pub mod pallet {
 		NoCoinInfoAvailable,
 		/// AccountId is not authorized
 		ThisAccountIdIsNotAuthorized,
+		/// User cannot deauthorized themself
+		UserUnableToDeauthorizeThemself,
 	}
 
 	#[pallet::hooks]
@@ -161,17 +163,14 @@ pub mod pallet {
 		) -> DispatchResult {
 			//Pallet::<T>::check_origin_rights(origin)?;
 			let sender = ensure_signed(origin)?;
-			if sender == account_id {
-				todo!("might be return an Error, To be clarify")
-			} else {
-				match <AuthorizedAccounts<T>>::contains_key(&account_id) {
-					true => {
-						Self::deposit_event(Event::<T>::AccountIdDeauthorized(account_id.clone()));
-						<AuthorizedAccounts<T>>::remove(account_id);
-						Ok(())
-					}
-					false => Ok(()),
+			ensure!(account_id != sender, Error::<T>::UserUnableToDeauthorizeThemself);
+			match <AuthorizedAccounts<T>>::contains_key(&account_id) {
+				true => {
+					Self::deposit_event(Event::<T>::AccountIdDeauthorized(account_id.clone()));
+					<AuthorizedAccounts<T>>::remove(account_id);
+					Ok(())
 				}
+				false => Ok(()),
 			}
 		}
 
@@ -180,14 +179,12 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			coin_infos: Vec<(Vec<u8>, CoinInfo)>,
 		) -> DispatchResult {
-			Pallet::<T>::check_origin_rights(origin)?;
-
+			//Pallet::<T>::check_origin_rights(origin)?;
 			Self::deposit_event(Event::<T>::UpdatedPrices(coin_infos.clone()));
-
+			for (v, c) in coin_infos.into_iter().map(|(x, y)| (x, y)) {
+				<CoinInfosMap<T>>::insert(v, c);
+			}
 			Ok(())
-
-			// todo!("Should check authorization and after that update storage and emit event")
-			// for any authorized user the call should add given entries to the CoinInfosMap
 		}
 	}
 }
@@ -294,9 +291,9 @@ mod tests {
 	}
 
 	#[test]
-	fn deauthorize_account_should_work() {
+	fn deauthorize_account_should_work_without_deauthorizing_themself() {
 		new_test_ext().execute_with(|| {
-			let _test1 = DOracle::authorize_account(Origin::signed(1), 1);
+			let _test1 = DOracle::authorize_account(Origin::signed(1 ), 1);
 			let _test2 = DOracle::authorize_account(Origin::signed(2), 2);
 			let _test3 = DOracle::authorize_account(Origin::signed(3), 3);
 			let _test4 = DOracle::deauthorize_account(Origin::signed(3), 1);
@@ -304,6 +301,37 @@ mod tests {
 			assert_eq!(<AuthorizedAccounts<Test>>::contains_key(1), false);
 			assert_eq!(<AuthorizedAccounts<Test>>::contains_key(2), false);
 			assert_eq!(<AuthorizedAccounts<Test>>::contains_key(3), true);
+		})
+	}
+
+	#[test]
+	fn deauthorize_account_should_not_work_ny_deauthorizing_themself() {
+		new_test_ext().execute_with(|| {
+			let _test1 = DOracle::authorize_account(Origin::signed(1), 1);
+			let _test2 = DOracle::authorize_account(Origin::signed(1), 2);
+			let _test3 = DOracle::deauthorize_account(Origin::signed(2), 2);
+			let _test4 = DOracle::deauthorize_account(Origin::signed(2), 1);
+			assert_eq!(<AuthorizedAccounts<Test>>::contains_key(1), false);
+			assert_eq!(<AuthorizedAccounts<Test>>::contains_key(2), true);
+		})
+	}
+
+	#[test]
+	fn set_updated_coin_infos_should_work() {
+		new_test_ext().execute_with(|| {
+			let a: CoinInfo = CoinInfo {
+				symbol: vec![1],
+				name: vec![1],
+				supply: 9,
+				last_update_timestamp: 9,
+				price: 9,
+			};
+			let coin_infos = vec![(vec![1, 2, 3], CoinInfo::default()), (vec![2, 2, 2], a.clone())];
+			let _test1 = DOracle::set_updated_coin_infos(Origin::signed(1), coin_infos);
+			assert_eq!(<CoinInfosMap<Test>>::contains_key(vec![1, 2, 3]), true);
+			assert_eq!(<CoinInfosMap<Test>>::contains_key(vec![2, 2, 2]), true);
+			assert_eq!(<CoinInfosMap<Test>>::get(vec![2, 2, 2]), a);
+			assert_eq!(<CoinInfosMap<Test>>::get(vec![1, 2, 3]), CoinInfo::default());
 		})
 	}
 }
