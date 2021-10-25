@@ -3,9 +3,6 @@
 pub use pallet::*;
 
 #[cfg(test)]
-mod mock;
-
-#[cfg(test)]
 mod tests;
 
 #[cfg(feature = "runtime-benchmarks")]
@@ -13,27 +10,51 @@ mod benchmarking;
 
 #[frame_support::pallet]
 pub mod pallet {
-	use codec::{Encode, Decode};
-	use frame_support::{dispatch::DispatchResult, pallet_prelude::*, sp_std::vec::Vec};
-	use frame_system::pallet_prelude::*;
+	use codec::{Decode, Encode};
+	use frame_support::{
+		dispatch::DispatchResult, pallet_prelude::*, sp_runtime::offchain, sp_std, sp_std::vec::Vec,
+	};
+	use frame_system::{
+		offchain::{AppCrypto, CreateSignedTransaction, SendSignedTransaction, Signer},
+		pallet_prelude::*,
+	};
+	use serde::{Deserialize, Deserializer};
+
+	const BATCHING_ENDPOINT_FALLBACK: [u8; 22] = *b"http://localhost:8080/";
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
-	pub trait Config: frame_system::Config {
+	pub trait Config: frame_system::Config + CreateSignedTransaction<Call<Self>> {
+		/// The overarching event type.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
+		/// The overarching dispatch call type.
+		type Call: From<Call<Self>>;
+		/// The identifier type for an offchain worker.
+		type AuthorityId: AppCrypto<Self::Public, Self::Signature>;
 	}
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(_);
 
-	#[derive(Encode, Decode, scale_info::TypeInfo, Debug, Clone, PartialEq, Eq, Default)]
+	#[derive(
+		Encode, Decode, scale_info::TypeInfo, Debug, Clone, PartialEq, Eq, Default, Deserialize,
+	)]
 	pub struct CoinInfo {
+		#[serde(deserialize_with = "de_string_to_bytes")]
 		pub symbol: Vec<u8>,
+		#[serde(deserialize_with = "de_string_to_bytes")]
 		pub name: Vec<u8>,
 		pub supply: u64,
 		pub last_update_timestamp: u64,
-		pub price: u64
+		pub price: u64,
+	}
+	pub fn de_string_to_bytes<'de, D>(de: D) -> Result<Vec<u8>, D::Error>
+	where
+		D: Deserializer<'de>,
+	{
+		let s: &str = Deserialize::deserialize(de)?;
+		Ok(s.as_bytes().to_vec())
 	}
 
 	// TODO: Maybe it should be moved to it's own crate
@@ -55,6 +76,10 @@ pub mod pallet {
 	#[pallet::getter(fn supported_currencies)]
 	pub type SupportedCurrencies<T: Config> = StorageMap<_, Blake2_128Concat, Vec<u8>, ()>;
 
+	#[pallet::storage]
+	#[pallet::getter(fn batching_api)]
+	pub type BatchingApi<T: Config> = StorageValue<_, Vec<u8>>;
+
 	/// Map of all the coins names to their respective info and price
 	#[pallet::storage]
 	#[pallet::getter(fn prices_map)]
@@ -72,7 +97,7 @@ pub mod pallet {
 		/// Event is triggered when currency is added to the list
 		CurrencyAdded(Vec<u8>),
 		/// Event is triggered when currency is remove from the list
-		CurrencyRemoved(Vec<u8>)
+		CurrencyRemoved(Vec<u8>),
 	}
 
 	// Errors inform users that something went wrong.
@@ -80,14 +105,33 @@ pub mod pallet {
 	pub enum Error<T> {
 		/// Error is returned if no information is available about given coin
 		NoCoinInfoAvailable,
+
 		/// AccountId is not authorized
-		ThisAccountIdIsNotAuthorized
+		ThisAccountIdIsNotAuthorized,
+
+		/// Batching Api Endpoint not set.
+		NoBatchingApiEndPoint,
+
+		/// Failed Deserializing to str
+		DeserializeError,
+
+		/// Sending Http request to Batching Server Failed
+		HttpRequestSendFailed,
+
+		/// Http request to Batching Server Failed
+		HttpRequestFailed,
+
+		/// Failed to send signed Transaction
+		FailedSignedTransaction,
 	}
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn offchain_worker(_n: T::BlockNumber) {
-			Self::update_prices();
+			match Self::update_prices() {
+				Ok(_) => log::info!("Updated Prices"),
+				Err(_) => log::error!("Failed to Update Prices"),
+			}
 		}
 	}
 
@@ -102,10 +146,54 @@ pub mod pallet {
 	}
 
 	impl<T: Config> Pallet<T> {
-		fn update_prices() {
+		fn update_prices() -> Result<(), Error<T>> {
 			// Expected contract for the API with the server is supported currencies in URL path and
 			// json encoded Vec<CoinInfo> as a result from the server
-			todo!("Update prices information via Call::set_updated_coin_infos from the standalone server")
+			let supported_currencies: Vec<u8> = <SupportedCurrencies<T>>::iter_keys()
+				.map(|mut c| {
+					c.extend(b",");
+					c
+				})
+				.flatten()
+				.collect::<Vec<u8>>();
+
+			let mut api = Self::batching_api()
+				.ok_or(<Error<T>>::NoBatchingApiEndPoint) // Error Redundant but Explains Error Reason
+				.unwrap_or(BATCHING_ENDPOINT_FALLBACK.to_vec());
+
+			let request = if supported_currencies.len() < (u16::MAX as usize) {
+				api.extend(supported_currencies);
+				let api = sp_std::str::from_utf8(&api).map_err(|_| <Error<T>>::DeserializeError)?;
+				offchain::http::Request::get(api)
+			} else {
+				let api = sp_std::str::from_utf8(&api).map_err(|_| <Error<T>>::DeserializeError)?;
+				offchain::http::Request::post(api, vec![&supported_currencies[..]])
+			};
+
+			let pending = request.send().map_err(|_| <Error<T>>::HttpRequestSendFailed)?;
+			let response = pending.wait().map_err(|_| <Error<T>>::HttpRequestFailed)?;
+			let body = response.body().collect::<Vec<u8>>();
+
+			let prices: Vec<CoinInfo> =
+				serde_json::from_slice(&body).map_err(|_| <Error<T>>::DeserializeError)?;
+
+			let prices: Vec<(Vec<u8>, CoinInfo)> =
+				prices.into_iter().map(|p| (p.name.clone(), p)).collect();
+
+			let signer = Signer::<T, T::AuthorityId>::any_account();
+
+			signer
+				.send_signed_transaction(|_| Call::<T>::set_updated_coin_infos {
+					// `prices` are not `move`d because of Fn(_)
+					// `prices` would have `move`d if FnOnce(_) was in signature
+					// Hence the redundant clone.
+					coin_infos: prices.clone(),
+				})
+				.ok_or(<Error<T>>::FailedSignedTransaction)?
+				.1
+				.map_err(|_| <Error<T>>::FailedSignedTransaction)?;
+
+			Ok(())
 		}
 
 		fn check_origin_rights(_origin: OriginFor<T>) -> DispatchResult {
@@ -128,21 +216,29 @@ pub mod pallet {
 		}
 
 		#[pallet::weight(10_000)]
-		pub fn authorize_account(origin: OriginFor<T>, _account_id: T::AccountId) -> DispatchResult {
+		pub fn authorize_account(
+			origin: OriginFor<T>,
+			_account_id: T::AccountId,
+		) -> DispatchResult {
 			Pallet::<T>::check_origin_rights(origin)?;
 			todo!("Should check if the origin account is authorized and if it's ok, add given account_id to the authorized set")
 		}
 
-
 		#[pallet::weight(10_000)]
-		pub fn deauthorize_account(origin: OriginFor<T>, _account_id: T::AccountId) -> DispatchResult {
+		pub fn deauthorize_account(
+			origin: OriginFor<T>,
+			_account_id: T::AccountId,
+		) -> DispatchResult {
 			Pallet::<T>::check_origin_rights(origin)?;
 			// The origin account can't deauthorize itself
 			todo!("Should check if the origin account is authorized and if it's ok, should remove given account_id from the authorized set")
 		}
 
 		#[pallet::weight(10_000)]
-		pub fn set_updated_coin_infos(origin: OriginFor<T>, _coin_infos: Vec<(Vec<u8>, CoinInfo)>) -> DispatchResult {
+		pub fn set_updated_coin_infos(
+			origin: OriginFor<T>,
+			_coin_infos: Vec<(Vec<u8>, CoinInfo)>,
+		) -> DispatchResult {
 			Pallet::<T>::check_origin_rights(origin)?;
 			todo!("Should check authorization and after that update storage and emit event")
 		}
