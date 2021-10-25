@@ -107,8 +107,13 @@ pub mod pallet {
 			todo!("Update prices information via Call::set_updated_coin_infos from the standalone server")
 		}
 
-		fn check_origin_rights(_origin: OriginFor<T>) -> DispatchResult {
-			todo!("Should return \"not authorized error\" when not authorized origin is given")
+		fn check_origin_rights(origin: OriginFor<T>) -> DispatchResult {
+			let origin = ensure_signed(origin)?;
+			ensure!(
+				<AuthorizedAccounts<T>>::contains_key(origin),
+				Error::<T>::ThisAccountIdIsNotAuthorized
+			);
+			Ok(())
 		}
 	}
 
