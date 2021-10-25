@@ -107,10 +107,9 @@ pub mod pallet {
 			todo!("Update prices information via Call::set_updated_coin_infos from the standalone server")
 		}
 
-		fn check_origin_rights(origin: OriginFor<T>) -> DispatchResult {
-			let origin = ensure_signed(origin)?;
+		fn check_origin_rights(origin_account_id: &T::AccountId) -> DispatchResult {
 			ensure!(
-				<AuthorizedAccounts<T>>::contains_key(origin),
+				<AuthorizedAccounts<T>>::contains_key(origin_account_id),
 				Error::<T>::ThisAccountIdIsNotAuthorized
 			);
 			Ok(())
@@ -121,7 +120,8 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		#[pallet::weight(10_000)]
 		pub fn add_currency(origin: OriginFor<T>, currency_symbol: Vec<u8>) -> DispatchResult {
-			//Pallet::<T>::check_origin_rights(origin)?;
+			let origin_account_id = ensure_signed(origin)?;
+			Pallet::<T>::check_origin_rights(&origin_account_id)?;
 			match <SupportedCurrencies<T>>::contains_key(&currency_symbol) {
 				true => Ok(()),
 				false => {
@@ -134,7 +134,8 @@ pub mod pallet {
 
 		#[pallet::weight(10_000)]
 		pub fn remove_currency(origin: OriginFor<T>, currency_symbol: Vec<u8>) -> DispatchResult {
-			//Pallet::<T>::check_origin_rights(origin)?;
+			let origin_account_id = ensure_signed(origin)?;
+			Pallet::<T>::check_origin_rights(&origin_account_id)?;
 			match <SupportedCurrencies<T>>::contains_key(&currency_symbol) {
 				true => {
 					Self::deposit_event(Event::<T>::CurrencyRemoved(currency_symbol.clone()));
@@ -147,7 +148,8 @@ pub mod pallet {
 
 		#[pallet::weight(10_000)]
 		pub fn authorize_account(origin: OriginFor<T>, account_id: T::AccountId) -> DispatchResult {
-			// Pallet::<T>::check_origin_rights(origin)?;
+			let origin_account_id = ensure_signed(origin)?;
+			Pallet::<T>::check_origin_rights(&origin_account_id)?;
 			match <AuthorizedAccounts<T>>::contains_key(&account_id) {
 				true => Ok(()),
 				false => {
@@ -163,9 +165,9 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			account_id: T::AccountId,
 		) -> DispatchResult {
-			//Pallet::<T>::check_origin_rights(origin)?;
-			let sender = ensure_signed(origin)?;
-			ensure!(account_id != sender, Error::<T>::UserUnableToDeauthorizeThemself);
+			let origin_account_id = ensure_signed(origin)?;
+			Pallet::<T>::check_origin_rights(&origin_account_id)?;
+			ensure!(account_id != origin_account_id, Error::<T>::UserUnableToDeauthorizeThemself);
 			match <AuthorizedAccounts<T>>::contains_key(&account_id) {
 				true => {
 					Self::deposit_event(Event::<T>::AccountIdDeauthorized(account_id.clone()));
@@ -181,7 +183,8 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			coin_infos: Vec<(Vec<u8>, CoinInfo)>,
 		) -> DispatchResult {
-			//Pallet::<T>::check_origin_rights(origin)?;
+			let origin_account_id = ensure_signed(origin)?;
+			Pallet::<T>::check_origin_rights(&origin_account_id)?;
 			Self::deposit_event(Event::<T>::UpdatedPrices(coin_infos.clone()));
 			for (v, c) in coin_infos.into_iter().map(|(x, y)| (x, y)) {
 				<CoinInfosMap<T>>::insert(v, c);
@@ -195,7 +198,7 @@ pub mod pallet {
 mod tests {
 	use super::*;
 	use crate as dia_oracle;
-	use frame_support::parameter_types;
+	use frame_support::{parameter_types};
 	use frame_system as system;
 	use sp_core::H256;
 	use sp_runtime::{
@@ -261,9 +264,12 @@ mod tests {
 	#[test]
 	fn add_currency_should_work() {
 		new_test_ext().execute_with(|| {
+			<AuthorizedAccounts<Test>>::insert(1, ());
+
 			let _test1 = DOracle::add_currency(Origin::signed(1), vec![1]);
 			let _test2 = DOracle::add_currency(Origin::signed(1), vec![2]);
 			let _test3 = DOracle::add_currency(Origin::signed(1), vec![3]);
+			
 			assert_eq!(<SupportedCurrencies<Test>>::contains_key(vec![1]), true);
 			assert_eq!(<SupportedCurrencies<Test>>::contains_key(vec![2]), true);
 			assert_eq!(<SupportedCurrencies<Test>>::contains_key(vec![3]), true);
@@ -274,9 +280,12 @@ mod tests {
 	#[test]
 	fn remove_currency_should_work() {
 		new_test_ext().execute_with(|| {
+			<AuthorizedAccounts<Test>>::insert(1, ());
+
 			let _test1 = DOracle::add_currency(Origin::signed(1), vec![1]);
 			let _test2 = DOracle::add_currency(Origin::signed(1), vec![2]);
 			let _test3 = DOracle::remove_currency(Origin::signed(1), vec![2]);
+			
 			assert_eq!(<SupportedCurrencies<Test>>::contains_key(vec![1]), true);
 			assert_eq!(<SupportedCurrencies<Test>>::contains_key(vec![2]), false);
 		})
@@ -285,21 +294,31 @@ mod tests {
 	#[test]
 	fn authorize_account_should_work() {
 		new_test_ext().execute_with(|| {
-			let _test1 = DOracle::authorize_account(Origin::signed(1), 1);
-			let _test2 = DOracle::authorize_account(Origin::signed(1), 2);
-			let _test3 = DOracle::authorize_account(Origin::signed(1), 1);
-			assert_eq!(<AuthorizedAccounts<Test>>::contains_key(1), true);
+			<AuthorizedAccounts<Test>>::insert(1, ());
+
+			let _test1 = DOracle::authorize_account(Origin::signed(1), 2);
+			let _test2 = DOracle::authorize_account(Origin::signed(1), 3);
+			let _test3 = DOracle::authorize_account(Origin::signed(1), 4);
+			
+			assert_eq!(<AuthorizedAccounts<Test>>::contains_key(2), true);
+			assert_eq!(<AuthorizedAccounts<Test>>::contains_key(3), true);
+			assert_eq!(<AuthorizedAccounts<Test>>::contains_key(4), true);
 		})
 	}
 
 	#[test]
 	fn deauthorize_account_should_work_without_deauthorizing_themself() {
 		new_test_ext().execute_with(|| {
-			let _test1 = DOracle::authorize_account(Origin::signed(1 ), 1);
+			<AuthorizedAccounts<Test>>::insert(1, ());
+			<AuthorizedAccounts<Test>>::insert(2, ());
+			<AuthorizedAccounts<Test>>::insert(3, ());
+
+			let _test1 = DOracle::authorize_account(Origin::signed(1), 1);
 			let _test2 = DOracle::authorize_account(Origin::signed(2), 2);
 			let _test3 = DOracle::authorize_account(Origin::signed(3), 3);
 			let _test4 = DOracle::deauthorize_account(Origin::signed(3), 1);
 			let _test5 = DOracle::deauthorize_account(Origin::signed(3), 2);
+			
 			assert_eq!(<AuthorizedAccounts<Test>>::contains_key(1), false);
 			assert_eq!(<AuthorizedAccounts<Test>>::contains_key(2), false);
 			assert_eq!(<AuthorizedAccounts<Test>>::contains_key(3), true);
@@ -309,10 +328,14 @@ mod tests {
 	#[test]
 	fn deauthorize_account_should_not_work_ny_deauthorizing_themself() {
 		new_test_ext().execute_with(|| {
+			<AuthorizedAccounts<Test>>::insert(1, ());
+			<AuthorizedAccounts<Test>>::insert(2, ());
+
 			let _test1 = DOracle::authorize_account(Origin::signed(1), 1);
 			let _test2 = DOracle::authorize_account(Origin::signed(1), 2);
 			let _test3 = DOracle::deauthorize_account(Origin::signed(2), 2);
 			let _test4 = DOracle::deauthorize_account(Origin::signed(2), 1);
+			
 			assert_eq!(<AuthorizedAccounts<Test>>::contains_key(1), false);
 			assert_eq!(<AuthorizedAccounts<Test>>::contains_key(2), true);
 		})
@@ -321,19 +344,37 @@ mod tests {
 	#[test]
 	fn set_updated_coin_infos_should_work() {
 		new_test_ext().execute_with(|| {
-			let a: CoinInfo = CoinInfo {
+			<AuthorizedAccounts<Test>>::insert(1, ());
+
+			let example_info: CoinInfo = CoinInfo {
 				symbol: vec![1],
 				name: vec![1],
 				supply: 9,
 				last_update_timestamp: 9,
 				price: 9,
 			};
-			let coin_infos = vec![(vec![1, 2, 3], CoinInfo::default()), (vec![2, 2, 2], a.clone())];
+			let coin_infos = vec![(vec![1, 2, 3], CoinInfo::default()), (vec![2, 2, 2], example_info.clone())];
 			let _test1 = DOracle::set_updated_coin_infos(Origin::signed(1), coin_infos);
+			
 			assert_eq!(<CoinInfosMap<Test>>::contains_key(vec![1, 2, 3]), true);
 			assert_eq!(<CoinInfosMap<Test>>::contains_key(vec![2, 2, 2]), true);
-			assert_eq!(<CoinInfosMap<Test>>::get(vec![2, 2, 2]), a);
+			assert_eq!(<CoinInfosMap<Test>>::get(vec![2, 2, 2]), example_info);
 			assert_eq!(<CoinInfosMap<Test>>::get(vec![1, 2, 3]), CoinInfo::default());
 		})
 	}
+
+	#[test]
+	fn check_origin_right_shoud_work() {
+		new_test_ext().execute_with(|| {
+			<AuthorizedAccounts<Test>>::insert(1, ());
+			<AuthorizedAccounts<Test>>::insert(2, ());
+
+			let _test1 = DOracle::add_currency(Origin::signed(1), vec![1]);
+			let _test2 = DOracle::add_currency(Origin::signed(2), vec![2]);
+			
+			assert_eq!(<SupportedCurrencies<Test>>::contains_key(vec![1]), true);
+			assert_eq!(<SupportedCurrencies<Test>>::contains_key(vec![2]), true);
+		})
+	}
 }
+
