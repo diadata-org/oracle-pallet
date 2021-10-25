@@ -1,4 +1,4 @@
-use crate::handlers::currencies;
+use crate::handlers::{currencies_get, currencies_post};
 use crate::storage::CoinInfoStorage;
 use actix_web::{web, App, HttpServer};
 use std::sync::Arc;
@@ -22,8 +22,13 @@ async fn main() -> std::io::Result<()> {
 	)
 	.await;
 
-	HttpServer::new(move || App::new().app_data(data.clone()).service(currencies))
-		.bind("0.0.0.0:8080")?
-		.run()
-		.await
+	HttpServer::new(move || {
+		App::new()
+			.app_data(data.clone())
+			.service(currencies_get)
+			.service(currencies_post)
+	})
+	.bind("0.0.0.0:8080")?
+	.run()
+	.await
 }
