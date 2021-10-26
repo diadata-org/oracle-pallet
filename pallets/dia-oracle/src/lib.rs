@@ -91,8 +91,11 @@ pub mod pallet {
 	}
 
 	impl<T: Config> DiaOracle for Pallet<T> {
-		fn get_coin_info(_name: Vec<u8>) -> Result<CoinInfo, DispatchError> {
-			todo!("Return the coin info from the storage or return error if it's not found")
+		fn get_coin_info(name: Vec<u8>) -> Result<CoinInfo, DispatchError> {
+			ensure!(<CoinInfosMap<T>>::contains_key(&name), Error::<T>::NoCoinInfoAvailable);
+			let result = <CoinInfosMap<T>>::get(name);
+			Ok(result)
+
 		}
 
 		fn get_value(name: Vec<u8>) -> Result<u64, DispatchError> {
@@ -198,7 +201,7 @@ pub mod pallet {
 mod tests {
 	use super::*;
 	use crate as dia_oracle;
-	use frame_support::{parameter_types};
+	use frame_support::{assert_err, parameter_types};
 	use frame_system as system;
 	use sp_core::H256;
 	use sp_runtime::{
@@ -269,7 +272,7 @@ mod tests {
 			let _test1 = DOracle::add_currency(Origin::signed(1), vec![1]);
 			let _test2 = DOracle::add_currency(Origin::signed(1), vec![2]);
 			let _test3 = DOracle::add_currency(Origin::signed(1), vec![3]);
-			
+
 			assert_eq!(<SupportedCurrencies<Test>>::contains_key(vec![1]), true);
 			assert_eq!(<SupportedCurrencies<Test>>::contains_key(vec![2]), true);
 			assert_eq!(<SupportedCurrencies<Test>>::contains_key(vec![3]), true);
@@ -285,7 +288,7 @@ mod tests {
 			let _test1 = DOracle::add_currency(Origin::signed(1), vec![1]);
 			let _test2 = DOracle::add_currency(Origin::signed(1), vec![2]);
 			let _test3 = DOracle::remove_currency(Origin::signed(1), vec![2]);
-			
+
 			assert_eq!(<SupportedCurrencies<Test>>::contains_key(vec![1]), true);
 			assert_eq!(<SupportedCurrencies<Test>>::contains_key(vec![2]), false);
 		})
@@ -299,7 +302,7 @@ mod tests {
 			let _test1 = DOracle::authorize_account(Origin::signed(1), 2);
 			let _test2 = DOracle::authorize_account(Origin::signed(1), 3);
 			let _test3 = DOracle::authorize_account(Origin::signed(1), 4);
-			
+
 			assert_eq!(<AuthorizedAccounts<Test>>::contains_key(2), true);
 			assert_eq!(<AuthorizedAccounts<Test>>::contains_key(3), true);
 			assert_eq!(<AuthorizedAccounts<Test>>::contains_key(4), true);
@@ -318,7 +321,7 @@ mod tests {
 			let _test3 = DOracle::authorize_account(Origin::signed(3), 3);
 			let _test4 = DOracle::deauthorize_account(Origin::signed(3), 1);
 			let _test5 = DOracle::deauthorize_account(Origin::signed(3), 2);
-			
+
 			assert_eq!(<AuthorizedAccounts<Test>>::contains_key(1), false);
 			assert_eq!(<AuthorizedAccounts<Test>>::contains_key(2), false);
 			assert_eq!(<AuthorizedAccounts<Test>>::contains_key(3), true);
@@ -335,7 +338,7 @@ mod tests {
 			let _test2 = DOracle::authorize_account(Origin::signed(1), 2);
 			let _test3 = DOracle::deauthorize_account(Origin::signed(2), 2);
 			let _test4 = DOracle::deauthorize_account(Origin::signed(2), 1);
-			
+
 			assert_eq!(<AuthorizedAccounts<Test>>::contains_key(1), false);
 			assert_eq!(<AuthorizedAccounts<Test>>::contains_key(2), true);
 		})
@@ -353,9 +356,10 @@ mod tests {
 				last_update_timestamp: 9,
 				price: 9,
 			};
-			let coin_infos = vec![(vec![1, 2, 3], CoinInfo::default()), (vec![2, 2, 2], example_info.clone())];
+			let coin_infos =
+				vec![(vec![1, 2, 3], CoinInfo::default()), (vec![2, 2, 2], example_info.clone())];
 			let _test1 = DOracle::set_updated_coin_infos(Origin::signed(1), coin_infos);
-			
+
 			assert_eq!(<CoinInfosMap<Test>>::contains_key(vec![1, 2, 3]), true);
 			assert_eq!(<CoinInfosMap<Test>>::contains_key(vec![2, 2, 2]), true);
 			assert_eq!(<CoinInfosMap<Test>>::get(vec![2, 2, 2]), example_info);
@@ -371,10 +375,32 @@ mod tests {
 
 			let _test1 = DOracle::add_currency(Origin::signed(1), vec![1]);
 			let _test2 = DOracle::add_currency(Origin::signed(2), vec![2]);
-			
+
 			assert_eq!(<SupportedCurrencies<Test>>::contains_key(vec![1]), true);
 			assert_eq!(<SupportedCurrencies<Test>>::contains_key(vec![2]), true);
 		})
 	}
-}
 
+	#[test]
+	fn get_coin_info_shoud_work() {
+		new_test_ext().execute_with(|| {
+			<AuthorizedAccounts<Test>>::insert(1, ());
+
+			let example_info: CoinInfo = CoinInfo {
+				symbol: vec![1],
+				name: vec![1],
+				supply: 9,
+				last_update_timestamp: 9,
+				price: 9,
+			};
+			let coin_infos =
+				vec![(vec![1, 2, 3], CoinInfo::default()), (vec![2, 2, 2], example_info.clone())];
+			let _test1 = DOracle::set_updated_coin_infos(Origin::signed(1), coin_infos.clone());
+			let coin_info = DOracle::get_coin_info(vec![2,2,2]);
+			let fail_coin_info = DOracle::get_coin_info(vec![1,2,3,4]);
+			assert_eq!(coin_info, Ok(example_info));
+			assert_eq!(Ok(9), DOracle::get_value(vec![2,2,2]));
+			assert_err!(fail_coin_info, Error::<Test>::NoCoinInfoAvailable);
+		})
+	}
+}
