@@ -15,7 +15,6 @@ pub async fn run_update_prices_loop<T>(
 	let coins = Arc::clone(&storage);
 	let api = Arc::new(api);
 	let dia_api = Arc::clone(&api);
-	println!("Hello World");
 	tokio::spawn(async move {
 		loop {
 			let time_elapsed = std::time::Instant::now();
@@ -71,6 +70,7 @@ mod tests {
 	use std::{collections::HashMap, error::Error, sync::Arc};
 
 	use async_trait::async_trait;
+	use chrono::Utc;
 
 	use super::*;
 
@@ -78,11 +78,34 @@ mod tests {
 		quotation: HashMap<&'a str, Quotation>,
 	}
 
+	unsafe impl<'a> Send for MockDia<'a> {}
+	unsafe impl<'a> Sync for MockDia<'a> {}
+
 	impl<'a> MockDia<'a> {
 		pub fn new() -> Self {
 			let mut quotation = HashMap::new();
-			quotation.insert("BTC", Quotation::default());
-			quotation.insert("ETH", Quotation::default());
+			quotation.insert(
+				"BTC",
+				Quotation {
+					name: "BTC".into(),
+					price: 1.0,
+					price_yesterday: 1.0,
+					symbol: "BTC".into(),
+					time: Utc::now(),
+					volume_yesterday: 1.0,
+				},
+			);
+			quotation.insert(
+				"ETH",
+				Quotation {
+					name: "ETH".into(),
+					price: 1.0,
+					price_yesterday: 1.0,
+					symbol: "ETH".into(),
+					time: Utc::now(),
+					volume_yesterday: 1.0,
+				},
+			);
 
 			Self { quotation }
 		}
@@ -97,7 +120,7 @@ mod tests {
 			&self,
 			symbol: &str,
 		) -> Result<Self::Quotation, Box<dyn Error + Send + Sync>> {
-			Ok(self.quotation.get(symbol).ok_or("She".to_string())?.clone())
+			Ok(self.quotation.get(symbol).ok_or("Error Finding Quotation".to_string())?.clone())
 		}
 
 		async fn get_symbols(&self) -> Result<Self::Symbols, Box<dyn Error + Send + Sync>> {
@@ -108,7 +131,6 @@ mod tests {
 	async fn test_run_update_prices_loop() {
 		let mock_api = MockDia::new();
 		let storage = Arc::new(CoinInfoStorage::default());
-
 		run_update_prices_loop(
 			storage,
 			std::time::Duration::from_secs(1),
