@@ -1489,6 +1489,7 @@ version = "0.1.0"
 dependencies = [
  "actix-web",
  "arc-swap",
+ "async-trait",
  "chrono",
  "log",
  "pretty_env_logger",

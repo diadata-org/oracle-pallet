@@ -1,8 +1,11 @@
+use crate::dia::Dia;
 use crate::handlers::{currencies_get, currencies_post};
 use crate::storage::CoinInfoStorage;
+
 use actix_web::{web, App, HttpServer};
 use std::sync::Arc;
 
+mod dia;
 mod handlers;
 mod price_updater;
 mod storage;
@@ -19,6 +22,7 @@ async fn main() -> std::io::Result<()> {
 		storage,
 		std::time::Duration::from_secs(1),
 		std::time::Duration::from_secs(60),
+		Dia,
 	)
 	.await;
 
