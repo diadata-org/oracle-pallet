@@ -74,17 +74,13 @@ pub trait DiaApi {
 	type Symbols;
 	type Quotation;
 
-	async fn get_symbols(&self) -> Result<Self::Symbols, Box<dyn Error + Sync + Send>>;
+	async fn get_symbols(&self) -> Result<Self::Symbols, Box<dyn Error + Send + Sync>>;
 	async fn get_quotation(&self, _: &str)
 		-> Result<Self::Quotation, Box<dyn Error + Sync + Send>>;
 }
 pub struct Dia;
 unsafe impl Send for Dia {}
 unsafe impl Sync for Dia {}
-pub enum DiaError {
-	JsonParse,
-	RequestFailed,
-}
 
 #[async_trait]
 impl DiaApi for Dia {
@@ -94,26 +90,15 @@ impl DiaApi for Dia {
 	async fn get_quotation(
 		&self,
 		symbol: &str,
-	) -> Result<Self::Quotation, Box<dyn Error + Sync + Send>> {
-		match reqwest::get(&format!("{}/{}", QUOTATION_ENDPOINT, symbol)).await {
-			Ok(r) => match r.json().await {
-				Ok(q) => Ok(q),
-
-				Err(e) => Err(Box::new(e)),
-			},
-
-			Err(e) => Err(Box::new(e)),
-		}
+	) -> Result<Self::Quotation, Box<dyn Error + Send + Sync>> {
+		let r = reqwest::get(&format!("{}/{}", QUOTATION_ENDPOINT, symbol)).await?;
+		let q: Quotation = r.json().await?;
+		Ok(q)
 	}
 
 	async fn get_symbols(&self) -> Result<Self::Symbols, Box<dyn Error + Sync + Send>> {
-		match reqwest::get(SYMBOLS_ENDPOINT).await {
-			Ok(r) => match r.json().await {
-				Ok(q) => Ok(q),
-
-				Err(e) => Err(Box::new(e)),
-			},
-			Err(e) => Err(Box::new(e)),
-		}
+		let r = reqwest::get(SYMBOLS_ENDPOINT).await?;
+		let s: Symbols = r.json().await?;
+		Ok(s)
 	}
 }

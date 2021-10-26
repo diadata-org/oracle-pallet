@@ -1,4 +1,4 @@
-use crate::dia::{Dia, DiaApi, DiaError, Quotation, Symbols};
+use crate::dia::{DiaApi, Quotation, Symbols};
 use crate::storage::{CoinInfo, CoinInfoStorage};
 
 use log::{error, info};
@@ -15,6 +15,7 @@ pub async fn run_update_prices_loop<T>(
 	let coins = Arc::clone(&storage);
 	let api = Arc::new(api);
 	let dia_api = Arc::clone(&api);
+	println!("Hello World");
 	tokio::spawn(async move {
 		loop {
 			let time_elapsed = std::time::Instant::now();
@@ -67,16 +68,15 @@ fn convert_str_to_u64(input: &str) -> u64 {
 
 #[cfg(test)]
 mod tests {
-	use std::{collections::HashMap, sync::Arc};
+	use std::{collections::HashMap, error::Error, sync::Arc};
 
-	// use async_trait::async_trait;
+	use async_trait::async_trait;
 
 	use super::*;
 
 	struct MockDia<'a> {
 		quotation: HashMap<&'a str, Quotation>,
 	}
-	struct MockError;
 
 	impl<'a> MockDia<'a> {
 		pub fn new() -> Self {
@@ -88,30 +88,33 @@ mod tests {
 		}
 	}
 
-	// #[async_trait]
-	// impl<'a> DiaApi for MockDia<'a> {
-	// 	type Symbols = Symbols;
-	// 	type Quotation = Quotation;
+	#[async_trait]
+	impl<'a> DiaApi for MockDia<'a> {
+		type Symbols = Symbols;
+		type Quotation = Quotation;
 
-	// 	async fn get_quotation(&self, symbol: &str) -> Self::Quotation {
-	// 		Ok(self.quotation.get(symbol).ok_or(MockError)?.clone())
-	// 	}
+		async fn get_quotation(
+			&self,
+			symbol: &str,
+		) -> Result<Self::Quotation, Box<dyn Error + Send + Sync>> {
+			Ok(self.quotation.get(symbol).ok_or("She".to_string())?.clone())
+		}
 
-	// 	async fn get_symbols(&self) -> Self::Symbols {
-	// 		Ok(Symbols { symbols: vec!["BTC".into(), "ETC".into()] })
-	// 	}
-	// }
-	// #[tokio::test]
-	// async fn test_run_update_prices_loop() {
-	// 	let mock_api = MockDia::new();
-	// 	let storage = Arc::new(CoinInfoStorage::default());
+		async fn get_symbols(&self) -> Result<Self::Symbols, Box<dyn Error + Send + Sync>> {
+			Ok(Symbols { symbols: vec!["BTC".into(), "ETC".into()] })
+		}
+	}
+	#[tokio::test]
+	async fn test_run_update_prices_loop() {
+		let mock_api = MockDia::new();
+		let storage = Arc::new(CoinInfoStorage::default());
 
-	// 	run_update_prices_loop(
-	// 		storage,
-	// 		std::time::Duration::from_secs(1),
-	// 		std::time::Duration::from_secs(60),
-	// 		mock_api,
-	// 	)
-	// 	.await;
-	// }
+		run_update_prices_loop(
+			storage,
+			std::time::Duration::from_secs(1),
+			std::time::Duration::from_secs(60),
+			mock_api,
+		)
+		.await;
+	}
 }
