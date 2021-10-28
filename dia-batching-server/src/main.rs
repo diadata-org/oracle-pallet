@@ -24,7 +24,7 @@ async fn main() -> std::io::Result<()> {
 		std::time::Duration::from_secs(60),
 		Dia,
 	)
-	.await;
+	.await?;
 
 	HttpServer::new(move || {
 		App::new()

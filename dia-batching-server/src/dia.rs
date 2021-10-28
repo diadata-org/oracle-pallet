@@ -71,32 +71,20 @@ impl Default for Quotation {
 }
 #[async_trait]
 pub trait DiaApi {
-	type Symbols;
-	type Quotation;
-
-	async fn get_symbols(&self) -> Result<Self::Symbols, Box<dyn Error + Send + Sync>>;
-	async fn get_quotation(&self, _: &str)
-		-> Result<Self::Quotation, Box<dyn Error + Sync + Send>>;
+	async fn get_symbols(&self) -> Result<Symbols, Box<dyn Error + Send + Sync>>;
+	async fn get_quotation(&self, _: &str) -> Result<Quotation, Box<dyn Error + Sync + Send>>;
 }
 pub struct Dia;
-unsafe impl Send for Dia {}
-unsafe impl Sync for Dia {}
 
 #[async_trait]
 impl DiaApi for Dia {
-	type Symbols = Symbols;
-	type Quotation = Quotation;
-
-	async fn get_quotation(
-		&self,
-		symbol: &str,
-	) -> Result<Self::Quotation, Box<dyn Error + Send + Sync>> {
+	async fn get_quotation(&self, symbol: &str) -> Result<Quotation, Box<dyn Error + Send + Sync>> {
 		let r = reqwest::get(&format!("{}/{}", QUOTATION_ENDPOINT, symbol)).await?;
 		let q: Quotation = r.json().await?;
 		Ok(q)
 	}
 
-	async fn get_symbols(&self) -> Result<Self::Symbols, Box<dyn Error + Sync + Send>> {
+	async fn get_symbols(&self) -> Result<Symbols, Box<dyn Error + Sync + Send>> {
 		let r = reqwest::get(SYMBOLS_ENDPOINT).await?;
 		let s: Symbols = r.json().await?;
 		Ok(s)
