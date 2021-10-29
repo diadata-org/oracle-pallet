@@ -7,6 +7,7 @@ edition = "2018"
 [dependencies]
 actix-web = "3"
 arc-swap = "1.4.0"
+async-trait = "0.1.51"
 
 chrono = {version = "0.4.19", features = ["serde"] }
 
