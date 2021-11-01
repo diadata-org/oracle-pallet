@@ -1,7 +1,7 @@
 use crate::dia::{DiaApi, Quotation, Symbols};
 use crate::storage::{CoinInfo, CoinInfoStorage};
-
 use log::{error, info};
+use std::io::Error;
 use std::sync::Arc;
 
 pub async fn run_update_prices_loop<T>(
@@ -46,9 +46,9 @@ where
 				let coin_info = CoinInfo {
 					name: name.into(),
 					symbol: symbol.into(),
-					price: convert_str_to_u64(&price.to_string()), // Converting f64 to u64
+					price: convert_str_to_u64(&price.to_string()).unwrap(), // Converting f64 to u64
 					last_update_timestamp: time.timestamp().unsigned_abs(),
-					supply: convert_str_to_u64(&volume_yesterday.to_string()), // Converting f64 to u64
+					supply: convert_str_to_u64(&volume_yesterday.to_string()).unwrap(), // Converting f64 to u64
 				};
 
 				info!("Coin Price: {:#?}", price);
@@ -66,13 +66,40 @@ where
 	}
 }
 
-// TODO : Converting their floating pricing into u64
-fn convert_str_to_u64(input: &str) -> u64 {
+fn convert_str_to_u64(input: &str) -> Result<u64, Error> {
 	match input.split(".").collect::<Vec<_>>()[..] {
-		[major] => major.parse::<u64>().unwrap(),
-		[major, minor] => (major.parse::<u128>().unwrap() * 10u128.pow(minor.len() as u32))
-			.saturating_add(minor.parse::<u128>().unwrap()) as u64,
-		_ => 0,
+		[major] => Ok(major.parse::<u64>().unwrap() * 10u64.pow(6 as u32)),
+		[major, minor] => {
+			let c = (major.parse::<u64>().unwrap() * 10u64.pow(6 as u32))
+				.saturating_add(precision_digits(minor).unwrap());
+			Ok(c)
+		}
+		// ultimately it won't run to this option
+		_ => Ok(0),
+	}
+}
+
+fn precision_digits(minor: &str) -> Result<u64, Error> {
+	let minor: Vec<_> = minor.split("").filter(|minor| !minor.is_empty()).collect();
+	let mut six_digit = Vec::new();
+	match minor.len() {
+		0..=5 => {
+			let remaining_empty = 6 - minor.len();
+			for i in 0..minor.len() {
+				six_digit.push(minor[i])
+			}
+
+			let p = six_digit.join("").parse::<u64>().unwrap() * 10u64.pow(remaining_empty as u32);
+			Ok(p)
+		}
+		_ => {
+			for i in 0..6 {
+				six_digit.push(minor[i])
+			}
+
+			let p = six_digit.join("").parse::<u64>().unwrap();
+			Ok(p)
+		}
 	}
 }
 
@@ -117,6 +144,28 @@ mod tests {
 					volume_yesterday: 1.0,
 				},
 			);
+			quotation.insert(
+				"ADA",
+				Quotation {
+					name: "ADA".into(),
+					price: 12345678.0,
+					price_yesterday: 1.0,
+					symbol: "ADA".into(),
+					time: Utc::now(),
+					volume_yesterday: 1.0,
+				},
+			);
+			quotation.insert(
+				"XRP",
+				Quotation {
+					name: "XRP".into(),
+					price: 54321.123456789,
+					price_yesterday: 1.0,
+					symbol: "XRP".into(),
+					time: Utc::now(),
+					volume_yesterday: 1.0,
+				},
+			);
 
 			Self { quotation }
 		}
@@ -135,7 +184,7 @@ mod tests {
 		}
 
 		async fn get_symbols(&self) -> Result<Self::Symbols, Box<dyn Error + Send + Sync>> {
-			Ok(Symbols { symbols: vec!["BTC".into(), "ETH".into()] })
+			Ok(Symbols { symbols: vec!["BTC".into(), "ETH".into(), "ADA".into(), "XRP".into()] })
 		}
 	}
 	#[tokio::test]
@@ -147,7 +196,7 @@ mod tests {
 
 		update_prices(coins, api, std::time::Duration::from_secs(1)).await;
 
-		let c = storage.get_currencies_by_symbols(&["BTC", "ETH"]);
+		let c = storage.get_currencies_by_symbols(&["BTC", "ETH", "ADA", "XRP"]);
 
 		assert_eq!(2, c.len());
 
