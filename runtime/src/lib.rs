@@ -6,6 +6,7 @@
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
+use dia_oracle::weights::SubstrateWeight;
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
 };
@@ -277,6 +278,7 @@ impl dia_oracle::Config for Runtime {
 	type Event = Event;
 	type Call = Call;
 	type AuthorityId = dia_oracle::crypto::DiaAuthId;
+	type WeightInfo = ();
 }
 
 impl<LocalCall> frame_system::offchain::CreateSignedTransaction<LocalCall> for Runtime

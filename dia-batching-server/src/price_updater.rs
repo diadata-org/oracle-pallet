@@ -175,4 +175,29 @@ mod tests {
 
 		assert_eq!(c[0].name, "BTC");
 	}
+
+	#[tokio::test]
+	async fn test_update_prices_get_nothing() {
+		let mock_api = MockDia::new();
+		let storage = Arc::new(CoinInfoStorage::default());
+		let coins = Arc::clone(&storage);
+		update_prices(coins, &mock_api, std::time::Duration::from_secs(1)).await;
+
+		let c = storage.get_currencies_by_symbols::<&str>(&[]);
+
+		assert_eq!(0, c.len());
+	}
+
+	#[tokio::test]
+	async fn test_update_prices_get_integers() {
+		let mock_api = MockDia::new();
+		let storage = Arc::new(CoinInfoStorage::default());
+		let coins = Arc::clone(&storage);
+
+		update_prices(coins, &mock_api, std::time::Duration::from_secs(1)).await;
+
+		let c = storage.get_currencies_by_symbols(&["123"]);
+
+		assert_eq!(0, c.len());
+	}
 }

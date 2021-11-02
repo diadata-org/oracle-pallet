@@ -5,6 +5,15 @@ pub use pallet::*;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
+#[cfg(test)]
+mod tests;
+
+#[cfg(test)]
+pub(crate) mod mock;
+
+pub mod weights;
+pub use weights::WeightInfo;
+
 /// Based on the above `KeyTypeId` we need to generate a pallet-specific crypto type wrappers.
 /// We can use from supported crypto kinds (`sr25519`, `ed25519` and `ecdsa`) and augment
 /// the types with this pallet-specific identifier.
@@ -39,6 +48,7 @@ pub mod crypto {
 
 #[frame_support::pallet]
 pub mod pallet {
+	use super::*;
 	use codec::{Decode, Encode};
 	use frame_support::{
 		dispatch::DispatchResult,
@@ -61,10 +71,15 @@ pub mod pallet {
 	pub trait Config: frame_system::Config + CreateSignedTransaction<Call<Self>> {
 		/// The overarching event type.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
+
 		/// The overarching dispatch call type.
 		type Call: From<Call<Self>>;
+
 		/// The identifier type for an offchain worker.
 		type AuthorityId: AppCrypto<Self::Public, Self::Signature>;
+
+		/// Weight of pallet
+		type WeightInfo: WeightInfo;
 	}
 
 	#[pallet::pallet]
@@ -246,7 +261,7 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		#[pallet::weight(10_000)]
+		#[pallet::weight(<T as Config>::WeightInfo::add_currency())]
 		pub fn add_currency(origin: OriginFor<T>, currency_symbol: Vec<u8>) -> DispatchResult {
 			let origin_account_id = ensure_signed(origin)?;
 			Pallet::<T>::check_origin_rights(&origin_account_id)?;
@@ -260,7 +275,7 @@ pub mod pallet {
 			}
 		}
 
-		#[pallet::weight(10_000)]
+		#[pallet::weight(<T as Config>::WeightInfo::remove_currency())]
 		pub fn remove_currency(origin: OriginFor<T>, currency_symbol: Vec<u8>) -> DispatchResult {
 			let origin_account_id = ensure_signed(origin)?;
 			Pallet::<T>::check_origin_rights(&origin_account_id)?;
@@ -274,7 +289,7 @@ pub mod pallet {
 			}
 		}
 
-		#[pallet::weight(10_000)]
+		#[pallet::weight(<T as Config>::WeightInfo::authorize_account())]
 		pub fn authorize_account(origin: OriginFor<T>, account_id: T::AccountId) -> DispatchResult {
 			let origin_account_id = ensure_signed(origin)?;
 			Pallet::<T>::check_origin_rights(&origin_account_id)?;
@@ -288,7 +303,7 @@ pub mod pallet {
 			}
 		}
 
-		#[pallet::weight(10_000)]
+		#[pallet::weight(<T as Config>::WeightInfo::deauthorize_account())]
 		pub fn deauthorize_account(
 			origin: OriginFor<T>,
 			account_id: T::AccountId,
@@ -306,7 +321,7 @@ pub mod pallet {
 			}
 		}
 
-		#[pallet::weight(10_000)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_updated_coin_infos())]
 		pub fn set_updated_coin_infos(
 			origin: OriginFor<T>,
 			coin_infos: Vec<(Vec<u8>, CoinInfo)>,
@@ -319,268 +334,5 @@ pub mod pallet {
 			}
 			Ok(())
 		}
-	}
-}
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-	use crate as dia_oracle;
-	use frame_support::{assert_err, parameter_types};
-	use frame_system as system;
-	use sp_core::{sr25519::Signature, H256};
-	use sp_runtime::{
-		testing::{Header, TestXt},
-		traits::{BlakeTwo256, Extrinsic as ExtrinsicT, IdentifyAccount, IdentityLookup, Verify},
-	};
-
-	type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
-	type Block = frame_system::mocking::MockBlock<Test>;
-
-	// Configure a mock runtime to test the pallet.
-	frame_support::construct_runtime!(
-		pub enum Test where
-			Block = Block,
-			NodeBlock = Block,
-			UncheckedExtrinsic = UncheckedExtrinsic,
-		{
-			System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
-			DOracle: dia_oracle::{Pallet, Call, Storage, Event<T>},
-		}
-	);
-
-	parameter_types! {
-		pub const BlockHashCount: u64 = 250;
-		pub const SS58Prefix: u8 = 42;
-	}
-
-	impl system::Config for Test {
-		type BaseCallFilter = frame_support::traits::Everything;
-		type BlockWeights = ();
-		type BlockLength = ();
-		type DbWeight = ();
-		type Origin = Origin;
-		type Call = Call;
-		type Index = u64;
-		type BlockNumber = u64;
-		type Hash = H256;
-		type Hashing = BlakeTwo256;
-		type AccountId = sp_core::sr25519::Public;
-		type Lookup = IdentityLookup<Self::AccountId>;
-		type Header = Header;
-		type Event = Event;
-		type BlockHashCount = BlockHashCount;
-		type Version = ();
-		type PalletInfo = PalletInfo;
-		type AccountData = ();
-		type OnNewAccount = ();
-		type OnKilledAccount = ();
-		type SystemWeightInfo = ();
-		type SS58Prefix = SS58Prefix;
-		type OnSetCode = ();
-	}
-	type Extrinsic = TestXt<Call, ()>;
-	type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::AccountId;
-
-	impl frame_system::offchain::SigningTypes for Test {
-		type Public = <Signature as Verify>::Signer;
-		type Signature = Signature;
-	}
-
-	impl<LocalCall> frame_system::offchain::SendTransactionTypes<LocalCall> for Test
-	where
-		Call: From<LocalCall>,
-	{
-		type OverarchingCall = Call;
-		type Extrinsic = Extrinsic;
-	}
-
-	impl<LocalCall> frame_system::offchain::CreateSignedTransaction<LocalCall> for Test
-	where
-		Call: From<LocalCall>,
-	{
-		fn create_transaction<
-			C: frame_system::offchain::AppCrypto<Self::Public, Self::Signature>,
-		>(
-			call: Call,
-			_public: <Signature as Verify>::Signer,
-			_account: AccountId,
-			nonce: u64,
-		) -> Option<(Call, <Extrinsic as ExtrinsicT>::SignaturePayload)> {
-			Some((call, (nonce, ())))
-		}
-	}
-
-	impl dia_oracle::Config for Test {
-		type Event = Event;
-		type AuthorityId = super::crypto::DiaAuthId;
-		type Call = Call;
-	}
-
-	// Build genesis storage according to the mock runtime.
-	pub fn new_test_ext() -> sp_io::TestExternalities {
-		system::GenesisConfig::default().build_storage::<Test>().unwrap().into()
-	}
-
-	fn get_account_id(id: u8) -> AccountId {
-		AccountId::from(sp_core::sr25519::Public::from_raw([id; 32]))
-	}
-	#[test]
-	fn add_currency_should_work() {
-		new_test_ext().execute_with(|| {
-			<AuthorizedAccounts<Test>>::insert(AccountId::default(), ());
-
-			let _test1 = DOracle::add_currency(Origin::signed(Default::default()), vec![1]);
-			let _test2 = DOracle::add_currency(Origin::signed(Default::default()), vec![2]);
-			let _test3 = DOracle::add_currency(Origin::signed(Default::default()), vec![3]);
-
-			assert_eq!(<SupportedCurrencies<Test>>::contains_key(vec![1]), true);
-			assert_eq!(<SupportedCurrencies<Test>>::contains_key(vec![2]), true);
-			assert_eq!(<SupportedCurrencies<Test>>::contains_key(vec![3]), true);
-			assert_eq!(<SupportedCurrencies<Test>>::contains_key(vec![4]), false);
-		})
-	}
-
-	#[test]
-	fn remove_currency_should_work() {
-		new_test_ext().execute_with(|| {
-			<AuthorizedAccounts<Test>>::insert(AccountId::default(), ());
-
-			let _test1 = DOracle::add_currency(Origin::signed(Default::default()), vec![1]);
-			let _test2 = DOracle::add_currency(Origin::signed(Default::default()), vec![2]);
-			let _test3 = DOracle::remove_currency(Origin::signed(Default::default()), vec![2]);
-
-			assert_eq!(<SupportedCurrencies<Test>>::contains_key(vec![1]), true);
-			assert_eq!(<SupportedCurrencies<Test>>::contains_key(vec![2]), false);
-		})
-	}
-
-	#[test]
-	fn authorize_account_should_work() {
-		new_test_ext().execute_with(|| {
-			<AuthorizedAccounts<Test>>::insert(get_account_id(1), ());
-
-			let _test1 =
-				DOracle::authorize_account(Origin::signed(get_account_id(1)), get_account_id(2));
-			let _test2 =
-				DOracle::authorize_account(Origin::signed(get_account_id(1)), get_account_id(3));
-			let _test3 =
-				DOracle::authorize_account(Origin::signed(get_account_id(1)), get_account_id(4));
-			assert_eq!(<AuthorizedAccounts<Test>>::contains_key(get_account_id(2)), true);
-			assert_eq!(<AuthorizedAccounts<Test>>::contains_key(get_account_id(3)), true);
-			assert_eq!(<AuthorizedAccounts<Test>>::contains_key(get_account_id(4)), true);
-		})
-	}
-
-	#[test]
-	fn deauthorize_account_should_work_without_deauthorizing_themself() {
-		new_test_ext().execute_with(|| {
-			<AuthorizedAccounts<Test>>::insert(get_account_id(1), ());
-			<AuthorizedAccounts<Test>>::insert(get_account_id(2), ());
-			<AuthorizedAccounts<Test>>::insert(get_account_id(3), ());
-
-			let _test1 =
-				DOracle::authorize_account(Origin::signed(get_account_id(1)), get_account_id(1));
-			let _test2 =
-				DOracle::authorize_account(Origin::signed(get_account_id(2)), get_account_id(2));
-			let _test3 =
-				DOracle::authorize_account(Origin::signed(get_account_id(3)), get_account_id(3));
-
-			let _test4 =
-				DOracle::deauthorize_account(Origin::signed(get_account_id(3)), get_account_id(1));
-			let _test5 =
-				DOracle::deauthorize_account(Origin::signed(get_account_id(3)), get_account_id(2));
-
-			assert_eq!(<AuthorizedAccounts<Test>>::contains_key(get_account_id(1)), false);
-			assert_eq!(<AuthorizedAccounts<Test>>::contains_key(get_account_id(2)), false);
-			assert_eq!(<AuthorizedAccounts<Test>>::contains_key(get_account_id(3)), true);
-		})
-	}
-
-	#[test]
-	fn deauthorize_account_should_not_work_ny_deauthorizing_themself() {
-		new_test_ext().execute_with(|| {
-			<AuthorizedAccounts<Test>>::insert(get_account_id(1), ());
-			<AuthorizedAccounts<Test>>::insert(get_account_id(2), ());
-
-			let _test1 =
-				DOracle::authorize_account(Origin::signed(get_account_id(1)), get_account_id(1));
-			let _test2 =
-				DOracle::authorize_account(Origin::signed(get_account_id(1)), get_account_id(2));
-			let _test3 =
-				DOracle::deauthorize_account(Origin::signed(get_account_id(2)), get_account_id(2));
-			let _test4 =
-				DOracle::deauthorize_account(Origin::signed(get_account_id(2)), get_account_id(1));
-
-			assert_eq!(<AuthorizedAccounts<Test>>::contains_key(get_account_id(1)), false);
-			assert_eq!(<AuthorizedAccounts<Test>>::contains_key(get_account_id(2)), true);
-		})
-	}
-
-	#[test]
-	fn set_updated_coin_infos_should_work() {
-		new_test_ext().execute_with(|| {
-			<AuthorizedAccounts<Test>>::insert(AccountId::default(), ());
-
-			let example_info: CoinInfo = CoinInfo {
-				symbol: vec![1],
-				name: vec![1],
-				supply: 9,
-				last_update_timestamp: 9,
-				price: 9,
-			};
-			let coin_infos =
-				vec![(vec![1, 2, 3], CoinInfo::default()), (vec![2, 2, 2], example_info.clone())];
-			let _test1 =
-				DOracle::set_updated_coin_infos(Origin::signed(Default::default()), coin_infos);
-
-			assert_eq!(<CoinInfosMap<Test>>::contains_key(vec![1, 2, 3]), true);
-			assert_eq!(<CoinInfosMap<Test>>::contains_key(vec![2, 2, 2]), true);
-			assert_eq!(<CoinInfosMap<Test>>::get(vec![2, 2, 2]), example_info);
-			assert_eq!(<CoinInfosMap<Test>>::get(vec![1, 2, 3]), CoinInfo::default());
-		})
-	}
-
-	#[test]
-	fn check_origin_right_shoud_work() {
-		new_test_ext().execute_with(|| {
-			<AuthorizedAccounts<Test>>::insert(get_account_id(1), ());
-			<AuthorizedAccounts<Test>>::insert(get_account_id(2), ());
-
-			let _test1 = DOracle::add_currency(Origin::signed(get_account_id(1)), vec![1]);
-			let _test2 = DOracle::add_currency(Origin::signed(get_account_id(2)), vec![2]);
-
-			assert_eq!(<SupportedCurrencies<Test>>::contains_key(vec![1]), true);
-			assert_eq!(<SupportedCurrencies<Test>>::contains_key(vec![2]), true);
-		})
-	}
-
-	#[test]
-	fn get_coin_info_shoud_work() {
-		new_test_ext().execute_with(|| {
-			<AuthorizedAccounts<Test>>::insert(get_account_id(1), ());
-
-			let example_info: CoinInfo = CoinInfo {
-				symbol: vec![1],
-				name: vec![1],
-				supply: 9,
-				last_update_timestamp: 9,
-				price: 9,
-			};
-			let coin_infos =
-				vec![(vec![1, 2, 3], CoinInfo::default()), (vec![2, 2, 2], example_info.clone())];
-
-			let _test1 = DOracle::set_updated_coin_infos(
-				Origin::signed(get_account_id(1)),
-				coin_infos.clone(),
-			);
-
-			let coin_info = DOracle::get_coin_info(vec![2, 2, 2]);
-			let fail_coin_info = DOracle::get_coin_info(vec![1, 2, 3, 4]);
-
-			assert_eq!(coin_info, Ok(example_info));
-			assert_eq!(Ok(9), DOracle::get_value(vec![2, 2, 2]));
-			assert_err!(fail_coin_info, Error::<Test>::NoCoinInfoAvailable);
-		})
 	}
 }
