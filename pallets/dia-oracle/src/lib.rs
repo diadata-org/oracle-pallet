@@ -58,7 +58,7 @@ pub mod pallet {
 		sp_std::{vec, vec::Vec},
 	};
 	use frame_system::{
-		ensure_signed,
+		ensure_root, ensure_signed,
 		offchain::{AppCrypto, CreateSignedTransaction, SendSignedTransaction, Signer},
 		pallet_prelude::*,
 	};
@@ -79,7 +79,7 @@ pub mod pallet {
 		type AuthorityId: AppCrypto<Self::Public, Self::Signature>;
 
 		/// Weight of pallet
-		type WeightInfo: WeightInfo;
+		type WeightInfo: weights::WeightInfo;
 	}
 
 	#[pallet::pallet]
@@ -175,6 +175,9 @@ pub mod pallet {
 
 		/// User cannot deauthorized themself
 		UserUnableToDeauthorizeThemself,
+
+		/// BadOrigin
+		BadOrigin,
 	}
 
 	#[pallet::hooks]
@@ -291,8 +294,12 @@ pub mod pallet {
 
 		#[pallet::weight(<T as Config>::WeightInfo::authorize_account())]
 		pub fn authorize_account(origin: OriginFor<T>, account_id: T::AccountId) -> DispatchResult {
-			let origin_account_id = ensure_signed(origin)?;
-			Pallet::<T>::check_origin_rights(&origin_account_id)?;
+			if let Ok(origin_account_id) = ensure_signed(origin.clone()) {
+				Pallet::<T>::check_origin_rights(&origin_account_id)?;
+			} else {
+				ensure_root(origin)?;
+			}
+
 			match <AuthorizedAccounts<T>>::contains_key(&account_id) {
 				true => Ok(()),
 				false => {
@@ -308,9 +315,16 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			account_id: T::AccountId,
 		) -> DispatchResult {
-			let origin_account_id = ensure_signed(origin)?;
-			Pallet::<T>::check_origin_rights(&origin_account_id)?;
-			ensure!(account_id != origin_account_id, Error::<T>::UserUnableToDeauthorizeThemself);
+			if let Ok(origin_account_id) = ensure_signed(origin.clone()) {
+				Pallet::<T>::check_origin_rights(&origin_account_id)?;
+				ensure!(
+					account_id != origin_account_id,
+					Error::<T>::UserUnableToDeauthorizeThemself
+				);
+			} else {
+				ensure_root(origin)?;
+			}
+
 			match <AuthorizedAccounts<T>>::contains_key(&account_id) {
 				true => {
 					Self::deposit_event(Event::<T>::AccountIdDeauthorized(account_id.clone()));
