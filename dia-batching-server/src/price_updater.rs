@@ -198,9 +198,9 @@ mod tests {
 
 		let c = storage.get_currencies_by_symbols(&["BTC", "ETH", "ADA", "XRP"]);
 
-		assert_eq!(2, c.len());
+		assert_eq!(4, c.len());
 
-		assert_eq!(c[1].price, 1);
+		assert_eq!(c[1].price, 1000000);
 
 		assert_eq!(c[1].name, "ETH");
 	}
@@ -232,8 +232,28 @@ mod tests {
 
 		assert_eq!(1, c.len());
 
-		assert_eq!(c[0].price, 1);
+		assert_eq!(c[0].price, 1000000);
 
 		assert_eq!(c[0].name, "BTC");
 	}
+
+	#[tokio::test]
+	async fn test_convert_result() {
+		let mock_api = MockDia::new();
+		let api = Arc::new(mock_api);
+		let storage = Arc::new(CoinInfoStorage::default());
+		let coins = Arc::clone(&storage);
+
+		update_prices(coins, api, std::time::Duration::from_secs(1)).await;
+
+		let c = storage.get_currencies_by_symbols(&["BTC", "ETH", "ADA", "XRP"]);
+
+		assert_eq!(c[0].price, 1000000);
+		assert_eq!(c[1].price, 1000000);
+		assert_eq!(c[2].price, 12345678000000);
+		assert_eq!(c[3].price, 54321123456);
+
+		assert_eq!(c[1].name, "ETH");
+	}
+
 }
