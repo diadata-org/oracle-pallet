@@ -2,11 +2,17 @@
 #![allow(dead_code)]
 pub use pallet::*;
 
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
+
 #[cfg(test)]
 mod tests;
 
-#[cfg(feature = "runtime-benchmarks")]
-mod benchmarking;
+#[cfg(test)]
+pub(crate) mod mock;
+
+pub mod weights;
+pub use weights::WeightInfo;
 
 /// Based on the above `KeyTypeId` we need to generate a pallet-specific crypto type wrappers.
 /// We can use from supported crypto kinds (`sr25519`, `ed25519` and `ecdsa`) and augment
@@ -42,6 +48,7 @@ pub mod crypto {
 
 #[frame_support::pallet]
 pub mod pallet {
+	use super::*;
 	use codec::{Decode, Encode};
 	use frame_support::{
 		dispatch::DispatchResult,
@@ -51,6 +58,7 @@ pub mod pallet {
 		sp_std::{vec, vec::Vec},
 	};
 	use frame_system::{
+		ensure_root, ensure_signed,
 		offchain::{AppCrypto, CreateSignedTransaction, SendSignedTransaction, Signer},
 		pallet_prelude::*,
 	};
@@ -63,10 +71,15 @@ pub mod pallet {
 	pub trait Config: frame_system::Config + CreateSignedTransaction<Call<Self>> {
 		/// The overarching event type.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
+
 		/// The overarching dispatch call type.
 		type Call: From<Call<Self>>;
+
 		/// The identifier type for an offchain worker.
 		type AuthorityId: AppCrypto<Self::Public, Self::Signature>;
+
+		/// Weight of pallet
+		type WeightInfo: weights::WeightInfo;
 	}
 
 	#[pallet::pallet]
@@ -159,6 +172,12 @@ pub mod pallet {
 
 		/// Failed to send signed Transaction
 		FailedSignedTransaction,
+
+		/// User cannot deauthorized themself
+		UserUnableToDeauthorizeThemself,
+
+		/// BadOrigin
+		BadOrigin,
 	}
 
 	#[pallet::hooks]
@@ -172,8 +191,10 @@ pub mod pallet {
 	}
 
 	impl<T: Config> DiaOracle for Pallet<T> {
-		fn get_coin_info(_name: Vec<u8>) -> Result<CoinInfo, DispatchError> {
-			todo!("Return the coin info from the storage or return error if it's not found")
+		fn get_coin_info(name: Vec<u8>) -> Result<CoinInfo, DispatchError> {
+			ensure!(<CoinInfosMap<T>>::contains_key(&name), Error::<T>::NoCoinInfoAvailable);
+			let result = <CoinInfosMap<T>>::get(name);
+			Ok(result)
 		}
 
 		fn get_value(name: Vec<u8>) -> Result<u64, DispatchError> {
@@ -232,51 +253,100 @@ pub mod pallet {
 			Ok(())
 		}
 
-		fn check_origin_rights(_origin: OriginFor<T>) -> DispatchResult {
-			todo!("Should return \"not authorized error\" when not authorized origin is given")
+		fn check_origin_rights(origin_account_id: &T::AccountId) -> DispatchResult {
+			ensure!(
+				<AuthorizedAccounts<T>>::contains_key(origin_account_id),
+				Error::<T>::ThisAccountIdIsNotAuthorized
+			);
+			Ok(())
 		}
 	}
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		#[pallet::weight(10_000)]
-		pub fn add_currency(origin: OriginFor<T>, _currency_symbol: Vec<u8>) -> DispatchResult {
-			Pallet::<T>::check_origin_rights(origin)?;
-			todo!("Should check if the origin account is authorized and if it's ok, add given currency to the set")
+		#[pallet::weight(<T as Config>::WeightInfo::add_currency())]
+		pub fn add_currency(origin: OriginFor<T>, currency_symbol: Vec<u8>) -> DispatchResult {
+			let origin_account_id = ensure_signed(origin)?;
+			Pallet::<T>::check_origin_rights(&origin_account_id)?;
+			match <SupportedCurrencies<T>>::contains_key(&currency_symbol) {
+				true => Ok(()),
+				false => {
+					Self::deposit_event(Event::<T>::CurrencyAdded(currency_symbol.clone()));
+					<SupportedCurrencies<T>>::insert(currency_symbol, ());
+					Ok(())
+				}
+			}
 		}
 
-		#[pallet::weight(10_000)]
-		pub fn remove_currency(origin: OriginFor<T>, _currency_symbol: Vec<u8>) -> DispatchResult {
-			Pallet::<T>::check_origin_rights(origin)?;
-			todo!("Should check if the origin account is authorized and if it's ok, remove given currency from the set")
+		#[pallet::weight(<T as Config>::WeightInfo::remove_currency())]
+		pub fn remove_currency(origin: OriginFor<T>, currency_symbol: Vec<u8>) -> DispatchResult {
+			let origin_account_id = ensure_signed(origin)?;
+			Pallet::<T>::check_origin_rights(&origin_account_id)?;
+			match <SupportedCurrencies<T>>::contains_key(&currency_symbol) {
+				true => {
+					Self::deposit_event(Event::<T>::CurrencyRemoved(currency_symbol.clone()));
+					<SupportedCurrencies<T>>::remove(currency_symbol);
+					Ok(())
+				}
+				false => Ok(()),
+			}
 		}
 
-		#[pallet::weight(10_000)]
-		pub fn authorize_account(
-			origin: OriginFor<T>,
-			_account_id: T::AccountId,
-		) -> DispatchResult {
-			Pallet::<T>::check_origin_rights(origin)?;
-			todo!("Should check if the origin account is authorized and if it's ok, add given account_id to the authorized set")
+		#[pallet::weight(<T as Config>::WeightInfo::authorize_account())]
+		pub fn authorize_account(origin: OriginFor<T>, account_id: T::AccountId) -> DispatchResult {
+			if let Ok(origin_account_id) = ensure_signed(origin.clone()) {
+				Pallet::<T>::check_origin_rights(&origin_account_id)?;
+			} else {
+				ensure_root(origin)?;
+			}
+
+			match <AuthorizedAccounts<T>>::contains_key(&account_id) {
+				true => Ok(()),
+				false => {
+					Self::deposit_event(Event::<T>::AccountIdAuthorized(account_id.clone()));
+					<AuthorizedAccounts<T>>::insert(account_id, ());
+					Ok(())
+				}
+			}
 		}
 
-		#[pallet::weight(10_000)]
+		#[pallet::weight(<T as Config>::WeightInfo::deauthorize_account())]
 		pub fn deauthorize_account(
 			origin: OriginFor<T>,
-			_account_id: T::AccountId,
+			account_id: T::AccountId,
 		) -> DispatchResult {
-			Pallet::<T>::check_origin_rights(origin)?;
-			// The origin account can't deauthorize itself
-			todo!("Should check if the origin account is authorized and if it's ok, should remove given account_id from the authorized set")
+			if let Ok(origin_account_id) = ensure_signed(origin.clone()) {
+				Pallet::<T>::check_origin_rights(&origin_account_id)?;
+				ensure!(
+					account_id != origin_account_id,
+					Error::<T>::UserUnableToDeauthorizeThemself
+				);
+			} else {
+				ensure_root(origin)?;
+			}
+
+			match <AuthorizedAccounts<T>>::contains_key(&account_id) {
+				true => {
+					Self::deposit_event(Event::<T>::AccountIdDeauthorized(account_id.clone()));
+					<AuthorizedAccounts<T>>::remove(account_id);
+					Ok(())
+				}
+				false => Ok(()),
+			}
 		}
 
-		#[pallet::weight(10_000)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_updated_coin_infos())]
 		pub fn set_updated_coin_infos(
 			origin: OriginFor<T>,
-			_coin_infos: Vec<(Vec<u8>, CoinInfo)>,
+			coin_infos: Vec<(Vec<u8>, CoinInfo)>,
 		) -> DispatchResult {
-			Pallet::<T>::check_origin_rights(origin)?;
-			todo!("Should check authorization and after that update storage and emit event")
+			let origin_account_id = ensure_signed(origin)?;
+			Pallet::<T>::check_origin_rights(&origin_account_id)?;
+			Self::deposit_event(Event::<T>::UpdatedPrices(coin_infos.clone()));
+			for (v, c) in coin_infos.into_iter().map(|(x, y)| (x, y)) {
+				<CoinInfosMap<T>>::insert(v, c);
+			}
+			Ok(())
 		}
 	}
 }

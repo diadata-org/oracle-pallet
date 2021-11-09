@@ -3,36 +3,36 @@ use crate::storage::{CoinInfo, CoinInfoStorage};
 use log::{error, info};
 use std::io::Error;
 use std::sync::Arc;
+use tokio::task::JoinError;
 
 pub async fn run_update_prices_loop<T>(
 	storage: Arc<CoinInfoStorage>,
 	rate: std::time::Duration,
 	duration: std::time::Duration,
 	api: T,
-) where
-	T: DiaApi<Symbols = Symbols, Quotation = Quotation> + Send + Sync + 'static,
+) -> Result<(), JoinError>
+where
+	T: DiaApi + Send + Sync + 'static,
 {
 	let coins = Arc::clone(&storage);
-	let api = Arc::new(api);
 	tokio::spawn(async move {
 		loop {
 			let time_elapsed = std::time::Instant::now();
 
 			let coins = Arc::clone(&coins);
-			let dia_api = Arc::clone(&api);
 
-			update_prices(coins, dia_api, rate).await;
+			update_prices(coins, &api, rate).await;
 
 			tokio::time::delay_for(duration.saturating_sub(time_elapsed.elapsed())).await;
 		}
 	})
-	.await
-	.unwrap();
+	.await?;
+	Ok(())
 }
 
-async fn update_prices<T>(coins: Arc<CoinInfoStorage>, api: Arc<T>, rate: std::time::Duration)
+async fn update_prices<T>(coins: Arc<CoinInfoStorage>, api: &T, rate: std::time::Duration)
 where
-	T: DiaApi<Symbols = Symbols, Quotation = Quotation> + Send + Sync + 'static,
+	T: DiaApi + Send + Sync + 'static,
 {
 	if let Ok(Symbols { symbols }) = api.get_symbols().await {
 		info!("No. of currencies to retrieve : {}", symbols.len());
@@ -116,9 +116,6 @@ mod tests {
 		quotation: HashMap<&'a str, Quotation>,
 	}
 
-	unsafe impl<'a> Send for MockDia<'a> {}
-	unsafe impl<'a> Sync for MockDia<'a> {}
-
 	impl<'a> MockDia<'a> {
 		pub fn new() -> Self {
 			let mut quotation = HashMap::new();
@@ -173,28 +170,23 @@ mod tests {
 
 	#[async_trait]
 	impl<'a> DiaApi for MockDia<'a> {
-		type Symbols = Symbols;
-		type Quotation = Quotation;
-
 		async fn get_quotation(
 			&self,
 			symbol: &str,
-		) -> Result<Self::Quotation, Box<dyn Error + Send + Sync>> {
+		) -> Result<Quotation, Box<dyn Error + Send + Sync>> {
 			Ok(self.quotation.get(symbol).ok_or("Error Finding Quotation".to_string())?.clone())
 		}
 
-		async fn get_symbols(&self) -> Result<Self::Symbols, Box<dyn Error + Send + Sync>> {
+		async fn get_symbols(&self) -> Result<Symbols, Box<dyn Error + Send + Sync>> {
 			Ok(Symbols { symbols: vec!["BTC".into(), "ETH".into(), "ADA".into(), "XRP".into()] })
 		}
 	}
 	#[tokio::test]
 	async fn test_update_prices() {
 		let mock_api = MockDia::new();
-		let api = Arc::new(mock_api);
 		let storage = Arc::new(CoinInfoStorage::default());
 		let coins = Arc::clone(&storage);
-
-		update_prices(coins, api, std::time::Duration::from_secs(1)).await;
+		update_prices(coins, &mock_api, std::time::Duration::from_secs(1)).await;
 
 		let c = storage.get_currencies_by_symbols(&["BTC", "ETH", "ADA", "XRP"]);
 
@@ -208,11 +200,9 @@ mod tests {
 	#[tokio::test]
 	async fn test_update_prices_non_existent() {
 		let mock_api = MockDia::new();
-		let api = Arc::new(mock_api);
 		let storage = Arc::new(CoinInfoStorage::default());
 		let coins = Arc::clone(&storage);
-
-		update_prices(coins, api, std::time::Duration::from_secs(1)).await;
+		update_prices(coins, &mock_api, std::time::Duration::from_secs(1)).await;
 
 		let c = storage.get_currencies_by_symbols(&["BTCCash", "ETHCase"]);
 
@@ -222,11 +212,9 @@ mod tests {
 	#[tokio::test]
 	async fn test_update_prices_one_available() {
 		let mock_api = MockDia::new();
-		let api = Arc::new(mock_api);
 		let storage = Arc::new(CoinInfoStorage::default());
 		let coins = Arc::clone(&storage);
-
-		update_prices(coins, api, std::time::Duration::from_secs(1)).await;
+		update_prices(coins, &mock_api, std::time::Duration::from_secs(1)).await;
 
 		let c = storage.get_currencies_by_symbols(&["BTC", "ETHCase"]);
 
@@ -238,13 +226,37 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn test_convert_result() {
+	async fn test_update_prices_get_nothing() {
 		let mock_api = MockDia::new();
-		let api = Arc::new(mock_api);
+		let storage = Arc::new(CoinInfoStorage::default());
+		let coins = Arc::clone(&storage);
+		update_prices(coins, &mock_api, std::time::Duration::from_secs(1)).await;
+
+		let c = storage.get_currencies_by_symbols::<&str>(&[]);
+
+		assert_eq!(0, c.len());
+	}
+
+	#[tokio::test]
+	async fn test_update_prices_get_integers() {
+		let mock_api = MockDia::new();
 		let storage = Arc::new(CoinInfoStorage::default());
 		let coins = Arc::clone(&storage);
 
-		update_prices(coins, api, std::time::Duration::from_secs(1)).await;
+		update_prices(coins, &mock_api, std::time::Duration::from_secs(1)).await;
+
+		let c = storage.get_currencies_by_symbols(&["123"]);
+
+		assert_eq!(0, c.len());
+	}
+
+	#[tokio::test]
+	async fn test_convert_result() {
+		let mock_api = MockDia::new();
+		let storage = Arc::new(CoinInfoStorage::default());
+		let coins = Arc::clone(&storage);
+
+		update_prices(coins, &mock_api, std::time::Duration::from_secs(1)).await;
 
 		let c = storage.get_currencies_by_symbols(&["BTC", "ETH", "ADA", "XRP"]);
 
@@ -255,5 +267,4 @@ mod tests {
 
 		assert_eq!(c[1].name, "ETH");
 	}
-
 }

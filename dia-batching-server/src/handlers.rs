@@ -232,4 +232,122 @@ mod tests {
 
 		assert_eq!(r[0].symbol, smol_str::SmolStr::new_inline("ETH".into()))
 	}
+
+	#[tokio::test]
+	async fn test_currencies_get_empty_str() {
+		let storage = get_storage();
+
+		let data = web::Data::from(storage.clone());
+		let mut app =
+			test::init_service(App::new().app_data(data.clone()).service(currencies_get)).await;
+		let req = test::TestRequest::with_uri("http://localhost:8080/currencies/,,,").to_request();
+
+		let resp = test::call_service(&mut app, req).await;
+
+		assert_eq!(resp.status(), http::StatusCode::OK);
+
+		let r: Vec<CoinInfo> = test::read_body_json(resp).await;
+
+		assert_eq!(r.len(), 0);
+	}
+
+	#[tokio::test]
+	async fn test_currencies_get_diff_separator() {
+		let storage = get_storage();
+
+		let data = web::Data::from(storage.clone());
+		let mut app =
+			test::init_service(App::new().app_data(data.clone()).service(currencies_get)).await;
+		let req =
+			test::TestRequest::with_uri("http://localhost:8080/currencies/ABC;ASD;").to_request();
+
+		let resp = test::call_service(&mut app, req).await;
+
+		assert_eq!(resp.status(), http::StatusCode::OK);
+
+		let r: Vec<CoinInfo> = test::read_body_json(resp).await;
+
+		assert_eq!(r.len(), 0);
+	}
+
+	#[tokio::test]
+	async fn test_currencies_get_special_char() {
+		let storage = get_storage();
+
+		let data = web::Data::from(storage.clone());
+		let mut app =
+			test::init_service(App::new().app_data(data.clone()).service(currencies_get)).await;
+		let req =
+			test::TestRequest::with_uri("http://localhost:8080/currencies/$COIN").to_request();
+
+		let resp = test::call_service(&mut app, req).await;
+
+		assert_eq!(resp.status(), http::StatusCode::OK);
+
+		let r: Vec<CoinInfo> = test::read_body_json(resp).await;
+
+		assert_eq!(r.len(), 0);
+	}
+
+	#[tokio::test]
+	async fn test_currencies_post_empty_string() {
+		let storage = get_storage();
+		let data = web::Data::from(storage.clone());
+
+		let mut app =
+			test::init_service(App::new().app_data(data.clone()).service(currencies_post)).await;
+		let req = test::TestRequest::post()
+			.uri("http://localhost:8080/currencies")
+			.set_json(&",,,")
+			.to_request();
+
+		let resp = test::call_service(&mut app, req).await;
+
+		assert_eq!(resp.status(), http::StatusCode::OK);
+
+		let r: Vec<CoinInfo> = test::read_body_json(resp).await;
+
+		assert_eq!(r.len(), 0);
+	}
+	#[tokio::test]
+	async fn test_currencies_post_special_char() {
+		let storage = get_storage();
+		let data = web::Data::from(storage.clone());
+
+		let mut app =
+			test::init_service(App::new().app_data(data.clone()).service(currencies_post)).await;
+		let req = test::TestRequest::post()
+			.uri("http://localhost:8080/currencies")
+			.set_json(&"$COIN")
+			.to_request();
+
+		let resp = test::call_service(&mut app, req).await;
+
+		assert_eq!(resp.status(), http::StatusCode::OK);
+
+		let r: Vec<CoinInfo> = test::read_body_json(resp).await;
+
+		assert_eq!(r.len(), 0);
+	}
+
+	#[tokio::test]
+	async fn test_currencies_post_diff_sep() {
+		let storage = get_storage();
+		let data = web::Data::from(storage.clone());
+
+		let mut app =
+			test::init_service(App::new().app_data(data.clone()).service(currencies_post)).await;
+		let req = test::TestRequest::post()
+			.uri("http://localhost:8080/currencies")
+			.set_json(&"ABC;AB;")
+			.to_request();
+
+		let resp = test::call_service(&mut app, req).await;
+
+		assert_eq!(resp.status(), http::StatusCode::OK);
+
+		let r: Vec<CoinInfo> = test::read_body_json(resp).await;
+
+		assert_eq!(r.len(), 0);
+	}
 }
