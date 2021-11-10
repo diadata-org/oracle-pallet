@@ -64,7 +64,7 @@ pub mod pallet {
 	};
 	use serde::{Deserialize, Deserializer};
 
-	const BATCHING_ENDPOINT_FALLBACK: [u8; 22] = *b"http://localhost:8080/";
+	const BATCHING_ENDPOINT_FALLBACK: [u8; 31] = *b"http://0.0.0.0:8070/currencies/";
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
@@ -147,6 +147,8 @@ pub mod pallet {
 		CurrencyAdded(Vec<u8>),
 		/// Event is triggered when currency is remove from the list
 		CurrencyRemoved(Vec<u8>),
+		/// Event is triggered when batching api route is set from the list
+		BatchingApiRouteSet(Vec<u8>),
 	}
 
 	// Errors inform users that something went wrong.
@@ -162,6 +164,9 @@ pub mod pallet {
 		NoBatchingApiEndPoint,
 
 		/// Failed Deserializing to str
+		DeserializeStrError,
+
+		/// Failed Deserializing
 		DeserializeError,
 
 		/// Sending Http request to Batching Server Failed
@@ -185,7 +190,7 @@ pub mod pallet {
 		fn offchain_worker(_n: T::BlockNumber) {
 			match Self::update_prices() {
 				Ok(_) => log::info!("Updated Prices"),
-				Err(_) => log::error!("Failed to Update Prices"),
+				Err(e) => log::error!("Failed to Update Prices {:?}", e),
 			}
 		}
 	}
@@ -220,10 +225,12 @@ pub mod pallet {
 
 			let request = if supported_currencies.len() < (u16::MAX as usize) {
 				api.extend(supported_currencies);
-				let api = sp_std::str::from_utf8(&api).map_err(|_| <Error<T>>::DeserializeError)?;
+				let api =
+					sp_std::str::from_utf8(&api).map_err(|_| <Error<T>>::DeserializeStrError)?;
 				offchain::http::Request::get(api)
 			} else {
-				let api = sp_std::str::from_utf8(&api).map_err(|_| <Error<T>>::DeserializeError)?;
+				let api =
+					sp_std::str::from_utf8(&api).map_err(|_| <Error<T>>::DeserializeStrError)?;
 				offchain::http::Request::post(api, vec![&supported_currencies[..]])
 			};
 
@@ -346,6 +353,15 @@ pub mod pallet {
 			for (v, c) in coin_infos.into_iter().map(|(x, y)| (x, y)) {
 				<CoinInfosMap<T>>::insert(v, c);
 			}
+			Ok(())
+		}
+
+		#[pallet::weight(<T as Config>::WeightInfo::set_batching_api())]
+		pub fn set_batching_api(origin: OriginFor<T>, api: Vec<u8>) -> DispatchResult {
+			let origin_account_id = ensure_signed(origin)?;
+			Pallet::<T>::check_origin_rights(&origin_account_id)?;
+			<BatchingApi<T>>::put(api.clone());
+			Self::deposit_event(Event::<T>::BatchingApiRouteSet(api));
 			Ok(())
 		}
 	}

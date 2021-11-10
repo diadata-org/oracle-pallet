@@ -44,6 +44,7 @@ pub trait WeightInfo{
 	fn deauthorize_account() -> Weight ;
 	fn deauthorize_account_signed() -> Weight ;
 	fn set_updated_coin_infos() -> Weight; 
+	fn set_batching_api() -> Weight; 
 }
 pub struct DiaWeightInfo<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for DiaWeightInfo<T> {
@@ -90,6 +91,12 @@ impl<T: frame_system::Config> WeightInfo for DiaWeightInfo<T> {
 			.saturating_add(T::DbWeight::get().reads(1 as Weight))
 			.saturating_add(T::DbWeight::get().writes(1 as Weight))
 	}
+
+	fn set_batching_api() -> Weight {
+		(1_241_248_000 as Weight)
+			.saturating_add(T::DbWeight::get().reads(1 as Weight))
+			.saturating_add(T::DbWeight::get().writes(1 as Weight))	
+	}
 }
 
 
@@ -134,6 +141,12 @@ impl WeightInfo for () {
 	// Storage: DiaOracle CoinInfosMap (r:0 w:1)
 	fn set_updated_coin_infos() -> Weight {
 		(1_152_148_682_000 as Weight)
+			.saturating_add(RocksDbWeight::get().reads(1 as Weight))
+			.saturating_add(RocksDbWeight::get().writes(1 as Weight))
+	}
+
+	fn set_batching_api() -> Weight {
+		(1_241_248_000 as Weight)
 			.saturating_add(RocksDbWeight::get().reads(1 as Weight))
 			.saturating_add(RocksDbWeight::get().writes(1 as Weight))
 	}
