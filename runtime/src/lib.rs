@@ -28,6 +28,7 @@ use codec::Encode;
 /// Import the template pallet.
 pub use dia_oracle;
 pub use frame_support::{
+	sp_std::vec::Vec,
 	construct_runtime, parameter_types,
 	traits::{KeyOwnerProofSystem, Randomness, StorageInfo},
 	weights::{
@@ -500,6 +501,16 @@ impl_runtime_apis! {
 			len: u32,
 		) -> pallet_transaction_payment::FeeDetails<Balance> {
 			TransactionPayment::query_fee_details(uxt, len)
+		}
+	}
+
+	impl dia_oracle_runtime_api::DiaOracleApi<Block> for Runtime{
+		fn get_value(name: frame_support::sp_std::vec::Vec<u8>)-> Result<u64,sp_runtime::DispatchError>{
+			DiaOracle::get_value(name)
+		}
+
+		fn get_coin_info(name:frame_support::sp_std::vec::Vec<u8>)-> Result<dia_oracle_runtime_api::CoinInfo,sp_runtime::DispatchError>{
+			DiaOracle::get_coin_info(name)
 		}
 	}
 
