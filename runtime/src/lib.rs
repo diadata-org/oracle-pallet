@@ -6,6 +6,7 @@
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
+use dia_oracle::DiaOracle;
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
 };
@@ -22,14 +23,13 @@ use sp_std::prelude::*;
 #[cfg(feature = "std")]
 use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
-
 // A few exports that help ease life for downstream crates.
 use codec::Encode;
 /// Import the template pallet.
 pub use dia_oracle;
 pub use frame_support::{
-	sp_std::vec::Vec,
 	construct_runtime, parameter_types,
+	sp_std::vec::Vec,
 	traits::{KeyOwnerProofSystem, Randomness, StorageInfo},
 	weights::{
 		constants::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight, WEIGHT_PER_SECOND},
@@ -340,7 +340,7 @@ construct_runtime!(
 		TransactionPayment: pallet_transaction_payment::{Pallet, Storage},
 		Sudo: pallet_sudo::{Pallet, Call, Config<T>, Storage, Event<T>},
 		// Include the custom logic from the pallet-template in the runtime.
-		DiaOracle: dia_oracle::{Pallet, Call, Storage, Event<T>},
+		DiaOracleModule: dia_oracle::{Pallet, Call, Storage, Event<T>},
 	}
 );
 
@@ -504,15 +504,15 @@ impl_runtime_apis! {
 		}
 	}
 
-	impl dia_oracle_runtime_api::DiaOracleApi<Block> for Runtime{
-		fn get_value(name: frame_support::sp_std::vec::Vec<u8>)-> Result<u64,sp_runtime::DispatchError>{
-			DiaOracle::get_value(name)
-		}
+		impl dia_oracle_runtime_api::DiaOracleApi<Block> for Runtime{
+			fn get_value(name: frame_support::sp_std::vec::Vec<u8>)-> Result<u64,sp_runtime::DispatchError>{
+				DiaOracleModule::get_value(name)
+			}
 
-		fn get_coin_info(name:frame_support::sp_std::vec::Vec<u8>)-> Result<dia_oracle_runtime_api::CoinInfo,sp_runtime::DispatchError>{
-			DiaOracle::get_coin_info(name)
+			fn get_coin_info(name:frame_support::sp_std::vec::Vec<u8>)-> Result<dia_oracle_runtime_api::CoinInfo,sp_runtime::DispatchError>{
+				DiaOracleModule::get_coin_info(name)
+			}
 		}
-	}
 
 	#[cfg(feature = "runtime-benchmarks")]
 	impl frame_benchmarking::Benchmark<Block> for Runtime {
@@ -529,7 +529,7 @@ impl_runtime_apis! {
 			list_benchmark!(list, extra, frame_system, SystemBench::<Runtime>);
 			list_benchmark!(list, extra, pallet_balances, Balances);
 			list_benchmark!(list, extra, pallet_timestamp, Timestamp);
-			list_benchmark!(list, extra, dia_oracle, DiaOracle);
+			list_benchmark!(list, extra, dia_oracle, DiaOracleModule);
 
 			let storage_info = AllPalletsWithSystem::storage_info();
 
@@ -563,7 +563,7 @@ impl_runtime_apis! {
 			add_benchmark!(params, batches, frame_system, SystemBench::<Runtime>);
 			add_benchmark!(params, batches, pallet_balances, Balances);
 			add_benchmark!(params, batches, pallet_timestamp, Timestamp);
-			add_benchmark!(params, batches, dia_oracle, DiaOracle);
+			add_benchmark!(params, batches, dia_oracle, DiaOracleModule);
 
 			if batches.is_empty() { return Err("Benchmark not found for this pallet.".into()) }
 			Ok(batches)

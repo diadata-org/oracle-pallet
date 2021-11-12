@@ -30,8 +30,6 @@ jsonrpc-core = '18.0.0'
 structopt = '0.3.8'
 dia-oracle-rpc = { version ="0.1.0", path = "../pallets/dia-oracle/rpc" }
 dia-oracle-runtime-api = { version ="0.1.0", path = "../pallets/dia-oracle/rpc/runtime-api" }
-jsonrpc-core-client = "15.0"
-jsonrpc-derive = "15.0"
 
 [dependencies.frame-benchmarking]
 git = 'https://github.com/paritytech/substrate.git'

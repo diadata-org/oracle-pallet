@@ -1,6 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub use dia_oracle::CoinInfo;
+use frame_support::sp_std::vec::Vec;
 use sp_runtime::DispatchError;
 
 sp_api::decl_runtime_apis! {

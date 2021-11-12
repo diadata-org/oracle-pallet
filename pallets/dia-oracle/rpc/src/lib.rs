@@ -4,7 +4,6 @@ use jsonrpc_derive::rpc;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
 use sp_core::Bytes;
-use sp_rpc::number::NumberOrHex;
 use sp_runtime::{generic::BlockId, traits::Block as BlockT};
 
 pub use dia_oracle_runtime_api::DiaOracleApi as DiaOracleRuntimeApi;
@@ -16,7 +15,7 @@ pub trait DiaOracleApi<BlockHash> {
 	#[rpc(name = "dia_getCoinInfo")]
 	fn get_coin_info(&self, name: Bytes, at: Option<BlockHash>) -> Result<CoinInfo>;
 	#[rpc(name = "dia_getValue")]
-	fn get_value(&self, name: Bytes, at: Option<BlockHash>) -> Result<NumberOrHex>;
+	fn get_value(&self, name: Bytes, at: Option<BlockHash>) -> Result<u64>;
 }
 
 /// A struct that implements the [`DiaOracleApi`].
@@ -77,7 +76,7 @@ where
 		Ok(r)
 	}
 
-	fn get_value(&self, name: Bytes, at: Option<<Block as BlockT>::Hash>) -> Result<NumberOrHex> {
+	fn get_value(&self, name: Bytes, at: Option<<Block as BlockT>::Hash>) -> Result<u64> {
 		let api = self.client.runtime_api();
 		let at = BlockId::hash(at.unwrap_or_else(||
 			// If the block hash is not supplied assume the best block.
@@ -95,6 +94,6 @@ where
 				message: "Unable to query get_value.".into(),
 				data: Some(format!("{:?}", e).into()),
 			})?;
-		Ok(r.into())
+		Ok(r)
 	}
 }

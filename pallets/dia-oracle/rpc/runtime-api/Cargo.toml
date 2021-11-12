@@ -11,12 +11,6 @@ targets = ["x86_64-unknown-linux-gnu"]
 [dependencies]
 dia-oracle = { version = "0.1.0", default-features = false, path = "../../../dia-oracle" }
 
-[dependencies.codec]
-default-features = false
-features = ['derive']
-package = 'parity-scale-codec'
-version = '2.0.0'
-
 [dependencies.sp-api]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
@@ -29,12 +23,18 @@ git = 'https://github.com/paritytech/substrate.git'
 tag = 'monthly-2021-10'
 version = '4.0.0-dev'
 
+[dependencies.frame-support]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+tag = 'monthly-2021-10'
+version = '4.0.0-dev'
+
 
 [features]
 default = ["std"]
 std = [
-	"codec/std",
 	"sp-api/std",
 	"sp-runtime/std",
+	'frame-support/std',
 	"dia-oracle/std",
 ]
