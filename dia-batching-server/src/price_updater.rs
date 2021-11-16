@@ -1,7 +1,6 @@
 use crate::dia::{DiaApi, Quotation, Symbols};
 use crate::storage::{CoinInfo, CoinInfoStorage};
 use log::{error, info};
-use std::io::Error;
 use std::sync::Arc;
 use tokio::task::JoinError;
 
@@ -46,9 +45,9 @@ where
 				let coin_info = CoinInfo {
 					name: name.into(),
 					symbol: symbol.into(),
-					price: convert_str_to_u64(&price.to_string()).unwrap(), // Converting f64 to u64
+					price,
 					last_update_timestamp: time.timestamp().unsigned_abs(),
-					supply: convert_str_to_u64(&volume_yesterday.to_string()).unwrap(), // Converting f64 to u64
+					supply: volume_yesterday,
 				};
 
 				info!("Coin Price: {:#?}", price);
@@ -63,43 +62,6 @@ where
 		}
 		coins.replace_currencies_by_symbols(currencies);
 		info!("Currencies Updated");
-	}
-}
-
-fn convert_str_to_u64(input: &str) -> Result<u64, Error> {
-	match input.split(".").collect::<Vec<_>>()[..] {
-		[major] => Ok(major.parse::<u64>().unwrap() * 10u64.pow(6 as u32)),
-		[major, minor] => {
-			let c = (major.parse::<u64>().unwrap() * 10u64.pow(6 as u32))
-				.saturating_add(precision_digits(minor).unwrap());
-			Ok(c)
-		}
-		// ultimately it won't run to this option
-		_ => Ok(0),
-	}
-}
-
-fn precision_digits(minor: &str) -> Result<u64, Error> {
-	let minor: Vec<_> = minor.split("").filter(|minor| !minor.is_empty()).collect();
-	let mut six_digit = Vec::new();
-	match minor.len() {
-		0..=5 => {
-			let remaining_empty = 6 - minor.len();
-			for i in 0..minor.len() {
-				six_digit.push(minor[i])
-			}
-
-			let p = six_digit.join("").parse::<u64>().unwrap() * 10u64.pow(remaining_empty as u32);
-			Ok(p)
-		}
-		_ => {
-			for i in 0..6 {
-				six_digit.push(minor[i])
-			}
-
-			let p = six_digit.join("").parse::<u64>().unwrap();
-			Ok(p)
-		}
 	}
 }
 
@@ -123,44 +85,44 @@ mod tests {
 				"BTC",
 				Quotation {
 					name: "BTC".into(),
-					price: 1.0,
-					price_yesterday: 1.0,
+					price: 1000000000000,
+					price_yesterday: 1000000000000,
 					symbol: "BTC".into(),
 					time: Utc::now(),
-					volume_yesterday: 1.0,
+					volume_yesterday: 1000000000000,
 				},
 			);
 			quotation.insert(
 				"ETH",
 				Quotation {
 					name: "ETH".into(),
-					price: 1.0,
-					price_yesterday: 1.0,
+					price: 1000000000000,
+					price_yesterday: 1000000000000,
 					symbol: "ETH".into(),
 					time: Utc::now(),
-					volume_yesterday: 1.0,
+					volume_yesterday: 1000000000000,
 				},
 			);
 			quotation.insert(
 				"ADA",
 				Quotation {
 					name: "ADA".into(),
-					price: 12345678.0,
-					price_yesterday: 1.0,
+					price: 12345123456789000,
+					price_yesterday: 1000000000000,
 					symbol: "ADA".into(),
 					time: Utc::now(),
-					volume_yesterday: 1.0,
+					volume_yesterday: 1000000000000,
 				},
 			);
 			quotation.insert(
 				"XRP",
 				Quotation {
 					name: "XRP".into(),
-					price: 54321.123456789,
-					price_yesterday: 1.0,
+					price: 123456789123456789012,
+					price_yesterday: 1000000000000,
 					symbol: "XRP".into(),
 					time: Utc::now(),
-					volume_yesterday: 1.0,
+					volume_yesterday: 1000000000000,
 				},
 			);
 
@@ -192,7 +154,7 @@ mod tests {
 
 		assert_eq!(4, c.len());
 
-		assert_eq!(c[1].price, 1000000);
+		assert_eq!(c[1].price, 1000000000000);
 
 		assert_eq!(c[1].name, "ETH");
 	}
@@ -220,7 +182,7 @@ mod tests {
 
 		assert_eq!(1, c.len());
 
-		assert_eq!(c[0].price, 1000000);
+		assert_eq!(c[0].price, 1000000000000);
 
 		assert_eq!(c[0].name, "BTC");
 	}
@@ -258,13 +220,11 @@ mod tests {
 
 		update_prices(coins, &mock_api, std::time::Duration::from_secs(1)).await;
 
-		let c = storage.get_currencies_by_symbols(&["BTC", "ETH", "ADA", "XRP"]);
+		let c = storage.get_currencies_by_symbols(&["ADA", "XRP"]);
+		assert_eq!(c[0].price, 12345123456789000);
+		assert_eq!(c[1].price, 123456789123456789012);
 
-		assert_eq!(c[0].price, 1000000);
-		assert_eq!(c[1].price, 1000000);
-		assert_eq!(c[2].price, 12345678000000);
-		assert_eq!(c[3].price, 54321123456);
-
-		assert_eq!(c[1].name, "ETH");
+		assert_eq!(c[0].name, "ADA");
+		assert_eq!(c[1].name, "XRP");
 	}
 }
