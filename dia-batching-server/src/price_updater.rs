@@ -2,18 +2,19 @@ use crate::dia::{DiaApi, Quotation, Symbols};
 use crate::storage::{CoinInfo, CoinInfoStorage};
 
 use log::{error, info};
-use std::sync::Arc;
+use std::{error::Error, sync::Arc};
 
 pub async fn run_update_prices_loop<T>(
 	storage: Arc<CoinInfoStorage>,
 	rate: std::time::Duration,
 	duration: std::time::Duration,
 	api: T,
-) where
+) -> Result<(), Box<dyn Error + Send + Sync + 'static>>
+where
 	T: DiaApi + Send + Sync + 'static,
 {
 	let coins = Arc::clone(&storage);
-	let _ = tokio::spawn(async move {
+	tokio::spawn(async move {
 		loop {
 			let time_elapsed = std::time::Instant::now();
 
@@ -24,7 +25,8 @@ pub async fn run_update_prices_loop<T>(
 			tokio::time::delay_for(duration.saturating_sub(time_elapsed.elapsed())).await;
 		}
 	})
-	.await;
+	.await?;
+	Ok(())
 }
 
 async fn update_prices<T>(coins: Arc<CoinInfoStorage>, api: &T, rate: std::time::Duration)
