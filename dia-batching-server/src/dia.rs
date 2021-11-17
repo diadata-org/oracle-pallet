@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use chrono::prelude::*;
-use serde::{Deserialize, Deserializer};
+use serde::{de::Error, Deserialize, Deserializer};
 use serde_json::Number;
-use std::error::Error;
+use std::{error, fmt};
 
 const SYMBOLS_ENDPOINT: &str = "https://api.diadata.org/v1/symbols";
 /// ### Symbols
@@ -65,51 +65,78 @@ pub struct Quotation {
 	pub time: DateTime<Utc>,
 }
 
+#[derive(Debug)]
+pub enum ConvertingError {
+	InvalidDigit,
+	ParseIntError,
+	InvalidInput,
+}
+
+impl error::Error for ConvertingError {}
+impl fmt::Display for ConvertingError {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		use ConvertingError::*;
+		match self {
+			InvalidDigit => write!(f, "InvalidDigit"),
+			ParseIntError => write!(f, "ParseIntError"),
+			InvalidInput => write!(f, "InvalidInput"),
+		}
+	}
+}
+
 fn convert<'de, D>(deserializer: D) -> Result<u128, D::Error>
 where
 	D: Deserializer<'de>,
 {
-	fn convert_str_to_u128(input: &str) -> Result<u128, std::io::Error> {
-		//panic!("{}", input);
+	fn convert_str_to_u128(input: &str) -> Result<u128, ConvertingError> {
 		match input.split(".").collect::<Vec<_>>()[..] {
-			[major] => Ok(major.parse::<u128>().unwrap() * 10u128.pow(12 as u32)),
-			[major, minor] => {
-				let c = (major.parse::<u128>().unwrap() * 10u128.pow(12 as u32))
-					.saturating_add(precision_digits(minor).unwrap());
-				Ok(c)
-			}
+			[major] => match major.parse::<u128>() {
+				Ok(x) => Ok(x * 10u128.pow(12 as u32)),
+				Err(_) => Err(ConvertingError::ParseIntError),
+			},
+			[major, minor] => match major.parse::<u128>() {
+				Ok(major) => match precision_digits(minor) {
+					Ok(minor) => Ok((major * 10u128.pow(12 as u32)).saturating_add(minor)),
+					Err(e) => Err(e),
+				},
+				Err(_) => Err(ConvertingError::ParseIntError),
+			},
 			// ultimately it won't run to this option
-			_ => Ok(0),
+			_ => Err(ConvertingError::InvalidInput),
 		}
 	}
 
-	fn precision_digits(minor: &str) -> Result<u128, std::io::Error> {
-		let minor: Vec<_> = minor.split("").filter(|minor| !minor.is_empty()).collect();
-		let mut six_digit = Vec::new();
-		match minor.len() {
-			0..=12 => {
-				let remaining_empty = 12 - minor.len();
-				for i in 0..minor.len() {
-					six_digit.push(minor[i])
+	fn precision_digits(minor: &str) -> Result<u128, ConvertingError> {
+		let mut twelve_digit = Vec::new();
+		let mut counter = 0;
+		for c in minor.chars() {
+			if counter < 12 {
+				match c.is_digit(10) {
+					true => {
+						twelve_digit.push(c.to_string());
+					}
+					false => return Err(ConvertingError::InvalidDigit),
+				};
+				counter += 1;
+			};
+		}
+		match twelve_digit.join("").parse::<u128>() {
+			Ok(x) => {
+				if minor.len() < 12 {
+					let length = 12 - minor.len();
+					Ok(x * 10u128.pow(length as u32))
+				} else {
+					Ok(x)
 				}
-
-				let p = six_digit.join("").parse::<u128>().unwrap()
-					* 10u128.pow(remaining_empty as u32);
-				Ok(p)
 			}
-			_ => {
-				for i in 0..12 {
-					six_digit.push(minor[i])
-				}
-
-				let p = six_digit.join("").parse::<u128>().unwrap();
-
-				Ok(p)
-			}
+			Err(_) => Err(ConvertingError::ParseIntError),
 		}
 	}
 
-	Ok(convert_str_to_u128(&Number::deserialize(deserializer)?.to_string()).unwrap())
+	match convert_str_to_u128(&Number::deserialize(deserializer)?.to_string()) {
+		Ok(x) => Ok(x),
+		Err(_) => Err(ConvertingError::InvalidInput).map_err(D::Error::custom),
+	}
 }
 
 impl Default for Quotation {
@@ -120,20 +147,26 @@ impl Default for Quotation {
 
 #[async_trait]
 pub trait DiaApi {
-	async fn get_symbols(&self) -> Result<Symbols, Box<dyn Error + Send + Sync>>;
-	async fn get_quotation(&self, _: &str) -> Result<Quotation, Box<dyn Error + Sync + Send>>;
+	async fn get_symbols(&self) -> Result<Symbols, Box<dyn error::Error + Send + Sync>>;
+	async fn get_quotation(
+		&self,
+		_: &str,
+	) -> Result<Quotation, Box<dyn error::Error + Sync + Send>>;
 }
 pub struct Dia;
 
 #[async_trait]
 impl DiaApi for Dia {
-	async fn get_quotation(&self, symbol: &str) -> Result<Quotation, Box<dyn Error + Send + Sync>> {
+	async fn get_quotation(
+		&self,
+		symbol: &str,
+	) -> Result<Quotation, Box<dyn error::Error + Send + Sync>> {
 		let r = reqwest::get(&format!("{}/{}", QUOTATION_ENDPOINT, symbol)).await?;
 		let q: Quotation = r.json().await?;
 		Ok(q)
 	}
 
-	async fn get_symbols(&self) -> Result<Symbols, Box<dyn Error + Sync + Send>> {
+	async fn get_symbols(&self) -> Result<Symbols, Box<dyn error::Error + Sync + Send>> {
 		let r = reqwest::get(SYMBOLS_ENDPOINT).await?;
 		let s: Symbols = r.json().await?;
 		Ok(s)
@@ -148,8 +181,8 @@ fn quotation_data() {
 		"Symbol":"BTC",
 		"Name":"Bitcoin",
 		"Price":98765.123456789012345,
-		"PriceYesterday":9574.416265039981,
-		"VolumeYesterdayUSD":298134760.8811487,
+		"PriceYesterday":9574.1,
+		"VolumeYesterdayUSD":298134760,
 		"Source":"diadata.org",
 		"Time":"2020-05-19T08:41:12.499645584Z",
 		"ITIN":"DXVPYDQC3"
@@ -162,9 +195,9 @@ fn quotation_data() {
 		symbol: "BTC".into(),
 		name: "BTC".into(),
 		price: 98765123456789012,
-		price_yesterday: 9574416265039981,
+		price_yesterday: 9574100000000000,
 		time: Utc::now(),
-		volume_yesterday: 298134760881148700000,
+		volume_yesterday: 298134760000000000000,
 	};
 
 	assert_eq!(quotation_result.price, quotation_data.price);
@@ -181,4 +214,3 @@ async fn test_quotation() {
 	// Example:
 	// https://api.diadata.org/v1/quotation/BTC
 }
- 
