@@ -5,8 +5,8 @@ services:
     container_name: dia_oracle_node
     image: dia/oracle
     ports:
-      - "9944:9944"
       - "9933:9933"
+      - "9945:9945"
       - "30333:30333"
     command: bash -c "/dia/target/release/node-template --base-path /data --chain local --alice --port 30333 --ws-port 9945 --rpc-port 9933 --node-key 0000000000000000000000000000000000000000000000000000000000000001 --telemetry-url 'ws://172.28.1.10:8000/submit 0' --validator"
     networks:
@@ -17,8 +17,9 @@ services:
     container_name: dia_oracle_node_two
     build: .
     ports:
+      - "9934:9934"
+      - "9946:9946"
       - "30334:30334"
-      - "9945:9945"
     command: bash -c "/dia/target/release/node-template --base-path /data --chain local --bob --port 30334 --ws-port 9946 --rpc-port 9934 --telemetry-url 'ws://172.28.1.10:8000/submit 0' --validator --bootnodes /ip4/127.0.0.1/tcp/30333/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp
     networks:
       testing_net:
