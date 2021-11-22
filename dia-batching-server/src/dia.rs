@@ -174,14 +174,14 @@ impl DiaApi for Dia {
 }
 
 #[test]
-fn quotation_data() {
+fn quotation_data_price() {
 	let quotation_result = serde_json::from_str::<Quotation>(
 		r#"
 	 {
 		"Symbol":"BTC",
 		"Name":"Bitcoin",
 		"Price":98765.123456789012345,
-		"PriceYesterday":9574.1,
+		"PriceYesterday":0.123456789012345,
 		"VolumeYesterdayUSD":298134760,
 		"Source":"diadata.org",
 		"Time":"2020-05-19T08:41:12.499645584Z",
@@ -194,10 +194,41 @@ fn quotation_data() {
 	let quotation_data = Quotation {
 		symbol: "BTC".into(),
 		name: "BTC".into(),
-		price: 98765123456789012,
-		price_yesterday: 9574100000000000,
+		price: 98765123456789012,          //without 345
+		price_yesterday:  123456789012, // only decimal is stored, if numbers, zero couldn't stored at most left
 		time: Utc::now(),
-		volume_yesterday: 298134760000000000000,
+		volume_yesterday: 298134760000000000000, // twelve 0s
+	};
+
+	assert_eq!(quotation_result.price, quotation_data.price);
+	assert_eq!(quotation_result.price_yesterday, quotation_data.price_yesterday);
+	assert_eq!(quotation_result.volume_yesterday, quotation_data.volume_yesterday);
+}
+#[test]
+fn quotation_data_price_with_zeros_at_front() {
+	let quotation_result = serde_json::from_str::<Quotation>(
+		r#"
+	 {
+		"Symbol":"BTC",
+		"Name":"Bitcoin",
+		"Price":0,
+		"PriceYesterday":1.000000000001,
+		"VolumeYesterdayUSD":0.000000000001,
+		"Source":"diadata.org",
+		"Time":"2020-05-19T08:41:12.499645584Z",
+		"ITIN":"DXVPYDQC3"
+	 }
+	"#,
+	)
+	.unwrap();
+
+	let quotation_data = Quotation {
+		symbol: "BTC".into(),
+		name: "BTC".into(),
+		price: 0, //price = 0
+		price_yesterday: 1000000000001,
+		time: Utc::now(),
+		volume_yesterday: 1, // with 0s, and only value at most right
 	};
 
 	assert_eq!(quotation_result.price, quotation_data.price);
