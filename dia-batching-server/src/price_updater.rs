@@ -3,9 +3,11 @@ use crate::storage::{CoinInfo, CoinInfoStorage};
 
 use log::{error, info};
 use std::{error::Error, sync::Arc};
+use std::collections::HashSet;
 
 pub async fn run_update_prices_loop<T>(
 	storage: Arc<CoinInfoStorage>,
+	supported_currencies: Option<HashSet<String>>,
 	rate: std::time::Duration,
 	duration: std::time::Duration,
 	api: T,
@@ -14,22 +16,22 @@ where
 	T: DiaApi + Send + Sync + 'static,
 {
 	let coins = Arc::clone(&storage);
-	tokio::spawn(async move {
+	let _ = tokio::spawn(async move {
 		loop {
 			let time_elapsed = std::time::Instant::now();
 
 			let coins = Arc::clone(&coins);
 
-			update_prices(coins, &api, rate).await;
+			update_prices(coins, &supported_currencies, &api, rate).await;
 
 			tokio::time::delay_for(duration.saturating_sub(time_elapsed.elapsed())).await;
 		}
-	})
-	.await?;
+	});
+
 	Ok(())
 }
 
-async fn update_prices<T>(coins: Arc<CoinInfoStorage>, api: &T, rate: std::time::Duration)
+async fn update_prices<T>(coins: Arc<CoinInfoStorage>, supported: &Option<HashSet<String>>, api: &T, rate: std::time::Duration)
 where
 	T: DiaApi + Send + Sync + 'static,
 {
@@ -38,25 +40,26 @@ where
 
 		let mut currencies = vec![];
 
-		for s in &symbols {
-			if let Ok(Quotation { name, symbol, price, time, volume_yesterday, .. }) =
-				api.get_quotation(s).await
-			{
-				let coin_info = CoinInfo {
-					name: name.into(),
-					symbol: symbol.into(),
-					price: convert_str_to_u64(&price.to_string()), // Converting f64 to u64
-					last_update_timestamp: time.timestamp().unsigned_abs(),
-					supply: convert_str_to_u64(&volume_yesterday.to_string()), // Converting f64 to u64
-				};
+		for s in symbols.iter().filter(|x| supported.as_ref().map(|set| set.contains(x.as_str())).unwrap_or(true)) {
+			match api.get_quotation(s).await {
+				Ok(Quotation { name, symbol, price, time, volume_yesterday, .. }) => {
+					let coin_info = CoinInfo {
+						name: name.into(),
+						symbol: symbol.into(),
+						price: convert_f64_to_u64(price), // Converting f64 to u64
+						last_update_timestamp: time.timestamp().unsigned_abs(),
+						supply: convert_f64_to_u64(volume_yesterday), // Converting f64 to u64
+					};
 
-				info!("Coin Price: {:#?}", price);
-				info!("Coin Supply: {:#?}", volume_yesterday);
-				info!("Coin Info : {:#?}", coin_info);
+					info!("Coin Price: {:#?}", price);
+					info!("Coin Supply: {:#?}", volume_yesterday);
+					info!("Coin Info : {:#?}", coin_info);
 
-				currencies.push(coin_info);
-			} else {
-				error!("Error while retrieving quotation for {}", s);
+					currencies.push(coin_info);
+				},
+				Err(err) => {
+					error!("Error while retrieving quotation for {}: {}", s, err)
+				}
 			}
 			tokio::time::delay_for(rate).await;
 		}
@@ -65,14 +68,9 @@ where
 	}
 }
 
-// TODO : Converting their floating pricing into u64
-fn convert_str_to_u64(input: &str) -> u64 {
-	match input.split(".").collect::<Vec<_>>()[..] {
-		[major] => major.parse::<u64>().unwrap(),
-		[major, minor] => (major.parse::<u128>().unwrap() * 10u128.pow(minor.len() as u32))
-			.saturating_add(minor.parse::<u128>().unwrap()) as u64,
-		_ => 0,
-	}
+fn convert_f64_to_u64(input: f64) -> u64 {
+	let scaled = input * 1_000_000.0;
+	scaled.abs().ceil() as u64
 }
 
 #[cfg(test)]
@@ -136,13 +134,14 @@ mod tests {
 		let mock_api = MockDia::new();
 		let storage = Arc::new(CoinInfoStorage::default());
 		let coins = Arc::clone(&storage);
-		update_prices(coins, &mock_api, std::time::Duration::from_secs(1)).await;
+		let all_currencies = None;
+		update_prices(coins, &all_currencies, &mock_api, std::time::Duration::from_secs(1)).await;
 
 		let c = storage.get_currencies_by_symbols(&["BTC", "ETH"]);
 
 		assert_eq!(2, c.len());
 
-		assert_eq!(c[1].price, 1);
+		assert_eq!(c[1].price, 1_000_000);
 
 		assert_eq!(c[1].name, "ETH");
 	}
@@ -152,7 +151,8 @@ mod tests {
 		let mock_api = MockDia::new();
 		let storage = Arc::new(CoinInfoStorage::default());
 		let coins = Arc::clone(&storage);
-		update_prices(coins, &mock_api, std::time::Duration::from_secs(1)).await;
+		let all_currencies = None;
+		update_prices(coins, &all_currencies, &mock_api, std::time::Duration::from_secs(1)).await;
 
 		let c = storage.get_currencies_by_symbols(&["BTCCash", "ETHCase"]);
 
@@ -164,13 +164,14 @@ mod tests {
 		let mock_api = MockDia::new();
 		let storage = Arc::new(CoinInfoStorage::default());
 		let coins = Arc::clone(&storage);
-		update_prices(coins, &mock_api, std::time::Duration::from_secs(1)).await;
+		let all_currencies = None;
+		update_prices(coins, &all_currencies, &mock_api, std::time::Duration::from_secs(1)).await;
 
 		let c = storage.get_currencies_by_symbols(&["BTC", "ETHCase"]);
 
 		assert_eq!(1, c.len());
 
-		assert_eq!(c[0].price, 1);
+		assert_eq!(c[0].price, 1_000_000);
 
 		assert_eq!(c[0].name, "BTC");
 	}
@@ -180,7 +181,8 @@ mod tests {
 		let mock_api = MockDia::new();
 		let storage = Arc::new(CoinInfoStorage::default());
 		let coins = Arc::clone(&storage);
-		update_prices(coins, &mock_api, std::time::Duration::from_secs(1)).await;
+		let all_currencies = None;
+		update_prices(coins, &all_currencies, &mock_api, std::time::Duration::from_secs(1)).await;
 
 		let c = storage.get_currencies_by_symbols::<&str>(&[]);
 
@@ -192,8 +194,9 @@ mod tests {
 		let mock_api = MockDia::new();
 		let storage = Arc::new(CoinInfoStorage::default());
 		let coins = Arc::clone(&storage);
+		let all_currencies = None;
 
-		update_prices(coins, &mock_api, std::time::Duration::from_secs(1)).await;
+		update_prices(coins, &all_currencies, &mock_api, std::time::Duration::from_secs(1)).await;
 
 		let c = storage.get_currencies_by_symbols(&["123"]);
 
