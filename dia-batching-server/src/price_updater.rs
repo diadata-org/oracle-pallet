@@ -1,6 +1,5 @@
 use crate::dia::{DiaApi, Quotation, Symbols};
 use crate::storage::{CoinInfo, CoinInfoStorage};
-
 use log::{error, info};
 use std::{error::Error, sync::Arc};
 
@@ -45,9 +44,9 @@ where
 				let coin_info = CoinInfo {
 					name: name.into(),
 					symbol: symbol.into(),
-					price: convert_str_to_u64(&price.to_string()), // Converting f64 to u64
+					price,
 					last_update_timestamp: time.timestamp().unsigned_abs(),
-					supply: convert_str_to_u64(&volume_yesterday.to_string()), // Converting f64 to u64
+					supply: volume_yesterday,
 				};
 
 				info!("Coin Price: {:#?}", price);
@@ -62,16 +61,6 @@ where
 		}
 		coins.replace_currencies_by_symbols(currencies);
 		info!("Currencies Updated");
-	}
-}
-
-// TODO : Converting their floating pricing into u64
-fn convert_str_to_u64(input: &str) -> u64 {
-	match input.split(".").collect::<Vec<_>>()[..] {
-		[major] => major.parse::<u64>().unwrap(),
-		[major, minor] => (major.parse::<u128>().unwrap() * 10u128.pow(minor.len() as u32))
-			.saturating_add(minor.parse::<u128>().unwrap()) as u64,
-		_ => 0,
 	}
 }
 
@@ -95,22 +84,44 @@ mod tests {
 				"BTC",
 				Quotation {
 					name: "BTC".into(),
-					price: 1.0,
-					price_yesterday: 1.0,
+					price: 1000000000000,
+					price_yesterday: 1000000000000,
 					symbol: "BTC".into(),
 					time: Utc::now(),
-					volume_yesterday: 1.0,
+					volume_yesterday: 1000000000000,
 				},
 			);
 			quotation.insert(
 				"ETH",
 				Quotation {
 					name: "ETH".into(),
-					price: 1.0,
-					price_yesterday: 1.0,
+					price: 1000000000000,
+					price_yesterday: 1000000000000,
 					symbol: "ETH".into(),
 					time: Utc::now(),
-					volume_yesterday: 1.0,
+					volume_yesterday: 1000000000000,
+				},
+			);
+			quotation.insert(
+				"ADA",
+				Quotation {
+					name: "ADA".into(),
+					price: 12345123456789000,
+					price_yesterday: 1000000000000,
+					symbol: "ADA".into(),
+					time: Utc::now(),
+					volume_yesterday: 1000000000000,
+				},
+			);
+			quotation.insert(
+				"XRP",
+				Quotation {
+					name: "XRP".into(),
+					price: 123456789123456789012,
+					price_yesterday: 1000000000000,
+					symbol: "XRP".into(),
+					time: Utc::now(),
+					volume_yesterday: 1000000000000,
 				},
 			);
 
@@ -128,7 +139,7 @@ mod tests {
 		}
 
 		async fn get_symbols(&self) -> Result<Symbols, Box<dyn Error + Send + Sync>> {
-			Ok(Symbols { symbols: vec!["BTC".into(), "ETH".into()] })
+			Ok(Symbols { symbols: vec!["BTC".into(), "ETH".into(), "ADA".into(), "XRP".into()] })
 		}
 	}
 	#[tokio::test]
@@ -138,11 +149,11 @@ mod tests {
 		let coins = Arc::clone(&storage);
 		update_prices(coins, &mock_api, std::time::Duration::from_secs(1)).await;
 
-		let c = storage.get_currencies_by_symbols(&["BTC", "ETH"]);
+		let c = storage.get_currencies_by_symbols(&["BTC", "ETH", "ADA", "XRP"]);
 
-		assert_eq!(2, c.len());
+		assert_eq!(4, c.len());
 
-		assert_eq!(c[1].price, 1);
+		assert_eq!(c[1].price, 1000000000000);
 
 		assert_eq!(c[1].name, "ETH");
 	}
@@ -170,7 +181,7 @@ mod tests {
 
 		assert_eq!(1, c.len());
 
-		assert_eq!(c[0].price, 1);
+		assert_eq!(c[0].price, 1000000000000);
 
 		assert_eq!(c[0].name, "BTC");
 	}
@@ -198,5 +209,21 @@ mod tests {
 		let c = storage.get_currencies_by_symbols(&["123"]);
 
 		assert_eq!(0, c.len());
+	}
+
+	#[tokio::test]
+	async fn test_convert_result() {
+		let mock_api = MockDia::new();
+		let storage = Arc::new(CoinInfoStorage::default());
+		let coins = Arc::clone(&storage);
+
+		update_prices(coins, &mock_api, std::time::Duration::from_secs(1)).await;
+
+		let c = storage.get_currencies_by_symbols(&["ADA", "XRP"]);
+		assert_eq!(c[0].price, 12345123456789000);
+		assert_eq!(c[1].price, 123456789123456789012);
+
+		assert_eq!(c[0].name, "ADA");
+		assert_eq!(c[1].name, "XRP");
 	}
 }
