@@ -1,4 +1,4 @@
-FROM rust:1-slim-buster
+FROM rust:1-slim-buster AS builder
 
 RUN apt-get update \
   && export DEBIAN_FRONTEND=noninteractive \
@@ -23,6 +23,25 @@ RUN cargo build --release \
   mkdir /data && \
   chown -R dia:dia /data 
 
+FROM debian:buster-slim
+
+RUN apt-get update \
+  && export DEBIAN_FRONTEND=noninteractive \
+  && apt-get install -y \
+  libssl-dev ca-certificates
+
+WORKDIR /dia
+
+COPY --from=builder  /dia/target/release/node-template /dia
+COPY --from=builder  /dia/target/release/dia-batching-server /dia
+
+RUN useradd -m -u 1000 -U -s /bin/sh -d /dia dia && \
+  mkdir -p /dia/.local/share && \
+  mkdir /data && \
+  chown -R dia:dia /data 
+
 USER dia
+
 EXPOSE 30333 9933 9944 8070
+
 VOLUME ["/data"]

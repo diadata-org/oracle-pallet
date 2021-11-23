@@ -8,7 +8,7 @@ services:
       - "9933:9933"
       - "9945:9945"
       - "30333:30333"
-    command: bash -c "/dia/target/release/node-template --base-path /data --chain local --alice --port 30333 --ws-port 9945 --rpc-port 9933 --node-key 0000000000000000000000000000000000000000000000000000000000000001 --validator"
+    command: bash -c "/dia/node-template --base-path /data --chain local --alice --port 30333 --ws-port 9945 --rpc-port 9933 --node-key 0000000000000000000000000000000000000000000000000000000000000001 --validator"
     networks:
       testing_net:
           ipv4_address: 172.28.1.1
@@ -20,7 +20,7 @@ services:
       - "9934:9934"
       - "9946:9946"
       - "30334:30334"
-    command: bash -c "/dia/target/release/node-template --base-path /data --chain local --bob --port 30334 --ws-port 9946 --rpc-port 9934  --validator --bootnodes /ip4/127.0.0.1/tcp/30333/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp"
+    command: bash -c "/dia/node-template --base-path /data --chain local --bob --port 30334 --ws-port 9946 --rpc-port 9934  --validator --bootnodes /ip4/127.0.0.1/tcp/30333/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp"
     networks:
       testing_net:
           ipv4_address: 172.28.1.3
@@ -31,7 +31,7 @@ services:
     image: dia/oracle
     ports:
       - "8070:8070"
-    command: bash -c "/dia/target/release/dia-batching-server"
+    command: bash -c "/dia/dia-batching-server"
     networks:
       testing_net:
           ipv4_address: 172.28.1.2
