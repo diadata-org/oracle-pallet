@@ -76,7 +76,7 @@ fn deauthorize_account_should_work_without_deauthorizing_themself() {
 }
 
 #[test]
-fn deauthorize_account_should_not_work_ny_deauthorizing_themself() {
+fn deauthorize_account_should_not_work_by_deauthorizing_themself() {
 	new_test_ext().execute_with(|| {
 		<AuthorizedAccounts<Test>>::insert(get_account_id(1), ());
 		<AuthorizedAccounts<Test>>::insert(get_account_id(2), ());
@@ -134,7 +134,7 @@ fn check_origin_right_shoud_work() {
 }
 
 #[test]
-fn get_coin_info_shoud_work() {
+fn get_coin_info_should_work() {
 	new_test_ext().execute_with(|| {
 		<AuthorizedAccounts<Test>>::insert(get_account_id(1), ());
 
@@ -152,10 +152,74 @@ fn get_coin_info_shoud_work() {
 			DOracle::set_updated_coin_infos(Origin::signed(get_account_id(1)), coin_infos.clone());
 
 		let coin_info = DOracle::get_coin_info(vec![2, 2, 2]);
-		let fail_coin_info = DOracle::get_coin_info(vec![1, 2, 3, 4]);
 
 		assert_eq!(coin_info, Ok(example_info));
 		assert_eq!(Ok(9), DOracle::get_value(vec![2, 2, 2]));
+	})
+}
+
+#[test]
+fn get_coin_info_should_return_error() {
+	new_test_ext().execute_with(|| {
+		<AuthorizedAccounts<Test>>::insert(get_account_id(1), ());
+
+		let example_info: CoinInfo = CoinInfo {
+			symbol: vec![1],
+			name: vec![1],
+			supply: 9,
+			last_update_timestamp: 9,
+			price: 9,
+		};
+		let coin_infos =
+			vec![(vec![1, 2, 3], CoinInfo::default()), (vec![2, 2, 2], example_info.clone())];
+
+		let _test1 =
+			DOracle::set_updated_coin_infos(Origin::signed(get_account_id(1)), coin_infos.clone());
+
+		let fail_coin_info = DOracle::get_coin_info(vec![1, 2, 3, 4]);
+
+		assert_err!(fail_coin_info, Error::<Test>::NoCoinInfoAvailable);
+	})
+}
+
+#[test]
+fn get_value_in_coin_info_should_work() {
+	new_test_ext().execute_with(|| {
+		<AuthorizedAccounts<Test>>::insert(get_account_id(1), ());
+
+		let example_info: CoinInfo = CoinInfo {
+			symbol: vec![1],
+			name: vec![1],
+			supply: 9,
+			last_update_timestamp: 9,
+			price: 9,
+		};
+		let coin_infos =
+			vec![(vec![1, 2, 3], CoinInfo::default()), (vec![2, 2, 2], example_info.clone())];
+
+		let _test1 =
+			DOracle::set_updated_coin_infos(Origin::signed(get_account_id(1)), coin_infos.clone());
+
+		let coin_info_one = DOracle::get_value(vec![1, 2, 3]);
+		let coin_info_two = DOracle::get_value(vec![2, 2, 2]);
+
+		assert_eq!(coin_info_one, Ok(CoinInfo::default().price));
+		assert_eq!(coin_info_two, Ok(example_info.price));
+	})
+}
+
+#[test]
+fn get_value_in_coin_info_should_return_error() {
+	new_test_ext().execute_with(|| {
+		<AuthorizedAccounts<Test>>::insert(get_account_id(1), ());
+
+		let coin_infos = vec![(vec![1, 2, 3], CoinInfo::default())];
+
+		let _test1 =
+			DOracle::set_updated_coin_infos(Origin::signed(get_account_id(1)), coin_infos.clone());
+
+		let fail_coin_info = DOracle::get_value(vec![1, 2, 3, 4]);
+
 		assert_err!(fail_coin_info, Error::<Test>::NoCoinInfoAvailable);
 	})
 }
