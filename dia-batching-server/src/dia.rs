@@ -67,7 +67,6 @@ pub struct Quotation {
 
 #[derive(Debug)]
 pub enum ConvertingError {
-	InvalidDigit,
 	ParseIntError,
 	InvalidInput,
 }
@@ -77,7 +76,6 @@ impl fmt::Display for ConvertingError {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		use ConvertingError::*;
 		match self {
-			InvalidDigit => write!(f, "InvalidDigit"),
 			ParseIntError => write!(f, "ParseIntError"),
 			InvalidInput => write!(f, "InvalidInput"),
 		}
@@ -90,53 +88,46 @@ where
 {
 	fn convert_str_to_u128(input: &str) -> Result<u128, ConvertingError> {
 		match input.split(".").collect::<Vec<_>>()[..] {
-			[major] => match major.parse::<u128>() {
-				Ok(x) => Ok(x * 10u128.pow(12 as u32)),
-				Err(_) => Err(ConvertingError::ParseIntError),
-			},
-			[major, minor] => match major.parse::<u128>() {
-				Ok(major) => match precision_digits(minor) {
-					Ok(minor) => Ok((major * 10u128.pow(12 as u32)).saturating_add(minor)),
-					Err(e) => Err(e),
-				},
-				Err(_) => Err(ConvertingError::ParseIntError),
-			},
+			[major] => Ok(major.parse::<u128>().map_err(|_| ConvertingError::ParseIntError)?
+				* 10u128.pow(12 as u32)),
+
+			[major, minor] => {
+				let major_parsed_number =
+					major.parse::<u128>().map_err(|_| ConvertingError::ParseIntError)?;
+
+				let minor_parsed_number = precision_digits(minor).map_err(|e| e)?;
+
+				Ok((major_parsed_number * 10u128.pow(12 as u32))
+					.saturating_add(minor_parsed_number))
+			}
 			// ultimately it won't run to this option
 			_ => Err(ConvertingError::InvalidInput),
 		}
 	}
 
 	fn precision_digits(minor: &str) -> Result<u128, ConvertingError> {
-		let mut twelve_digit = Vec::new();
-		let mut counter = 0;
-		for c in minor.chars() {
-			if counter < 12 {
-				match c.is_digit(10) {
-					true => {
-						twelve_digit.push(c.to_string());
-					}
-					false => return Err(ConvertingError::InvalidDigit),
-				};
-				counter += 1;
-			};
+		const PRECISION_IN_DIGITS: usize = 12;
+
+		let range =
+			if minor.len() < PRECISION_IN_DIGITS { ..minor.len() } else { ..PRECISION_IN_DIGITS };
+
+		let twelve_digits = minor.get(range).ok_or(ConvertingError::ParseIntError)?;
+
+		let parsed_number =
+			twelve_digits.parse::<u128>().map_err(|_| ConvertingError::ParseIntError)?;
+
+		if minor.len() < PRECISION_IN_DIGITS {
+			return Ok(parsed_number * 10u128.pow((PRECISION_IN_DIGITS - minor.len()) as u32));
 		}
-		match twelve_digit.join("").parse::<u128>() {
-			Ok(x) => {
-				if minor.len() < 12 {
-					let length = 12 - minor.len();
-					Ok(x * 10u128.pow(length as u32))
-				} else {
-					Ok(x)
-				}
-			}
-			Err(_) => Err(ConvertingError::ParseIntError),
-		}
+
+		Ok(parsed_number) 
 	}
 
-	match convert_str_to_u128(&Number::deserialize(deserializer)?.to_string()) {
-		Ok(x) => Ok(x),
-		Err(_) => Err(ConvertingError::InvalidInput).map_err(D::Error::custom),
-	}
+	let result = convert_str_to_u128(&Number::deserialize(deserializer)?.to_string())
+		.map_err(|_| ConvertingError::InvalidInput)
+		.map_err(D::Error::custom)?;
+
+	Ok(result)
 }
 
 impl Default for Quotation {
@@ -194,8 +185,8 @@ fn quotation_data_price() {
 	let quotation_data = Quotation {
 		symbol: "BTC".into(),
 		name: "BTC".into(),
-		price: 98765123456789012,          //without 345
-		price_yesterday:  123456789012, // only decimal is stored, if numbers, zero couldn't stored at most left
+		price: 98765123456789012,      //without 345
+		price_yesterday: 123456789012, // only decimal is stored, if numbers, zero couldn't stored at most left
 		time: Utc::now(),
 		volume_yesterday: 298134760000000000000, // twelve 0s
 	};
@@ -219,8 +210,7 @@ fn quotation_data_price_with_zeros_at_front() {
 		"ITIN":"DXVPYDQC3"
 	 }
 	"#,
-	)
-	.unwrap();
+	).unwrap();
 
 	let quotation_data = Quotation {
 		symbol: "BTC".into(),
