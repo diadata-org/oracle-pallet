@@ -2,15 +2,14 @@ use crate::dia::{DiaApi, Quotation, Symbols};
 use crate::storage::{CoinInfo, CoinInfoStorage};
 
 use log::{error, info};
-use std::sync::Arc;
-use tokio::task::JoinError;
+use std::{error::Error, sync::Arc};
 
 pub async fn run_update_prices_loop<T>(
 	storage: Arc<CoinInfoStorage>,
 	rate: std::time::Duration,
 	duration: std::time::Duration,
 	api: T,
-) -> Result<(), JoinError>
+) -> Result<(), Box<dyn Error + Send + Sync + 'static>>
 where
 	T: DiaApi + Send + Sync + 'static,
 {

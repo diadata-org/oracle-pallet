@@ -28,6 +28,8 @@ version = '3.0.0-monthly-2021-10'
 [dependencies]
 jsonrpc-core = '18.0.0'
 structopt = '0.3.8'
+dia-oracle-rpc = { version ="0.1.0", path = "../pallets/dia-oracle/rpc" }
+dia-oracle-runtime-api = { version ="0.1.0", path = "../pallets/dia-oracle/rpc/runtime-api" }
 
 [dependencies.frame-benchmarking]
 git = 'https://github.com/paritytech/substrate.git'
@@ -121,6 +123,11 @@ version = '4.0.0-dev'
 git = 'https://github.com/paritytech/substrate.git'
 tag = 'monthly-2021-10'
 version = '4.0.0-dev'
+
+[dependencies.sp-keystore]
+git = 'https://github.com/paritytech/substrate.git'
+tag = 'monthly-2021-10'
+version = '0.10.0-dev'
 
 [dependencies.sp-block-builder]
 git = 'https://github.com/paritytech/substrate.git'

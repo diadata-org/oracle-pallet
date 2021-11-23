@@ -11,6 +11,8 @@ mod tests;
 #[cfg(test)]
 pub(crate) mod mock;
 
+pub mod dia;
+pub use dia::*;
 pub mod weights;
 pub use weights::WeightInfo;
 
@@ -49,7 +51,7 @@ pub mod crypto {
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
-	use codec::{Decode, Encode};
+
 	use frame_support::{
 		dispatch::DispatchResult,
 		pallet_prelude::*,
@@ -62,9 +64,8 @@ pub mod pallet {
 		offchain::{AppCrypto, CreateSignedTransaction, SendSignedTransaction, Signer},
 		pallet_prelude::*,
 	};
-	use serde::{Deserialize, Deserializer};
 
-	const BATCHING_ENDPOINT_FALLBACK: [u8; 22] = *b"http://localhost:8080/";
+	const BATCHING_ENDPOINT_FALLBACK: [u8; 31] = *b"http://0.0.0.0:8070/currencies/";
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
@@ -85,35 +86,6 @@ pub mod pallet {
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(_);
-
-	#[derive(
-		Encode, Decode, scale_info::TypeInfo, Debug, Clone, PartialEq, Eq, Default, Deserialize,
-	)]
-	pub struct CoinInfo {
-		#[serde(deserialize_with = "de_string_to_bytes")]
-		pub symbol: Vec<u8>,
-		#[serde(deserialize_with = "de_string_to_bytes")]
-		pub name: Vec<u8>,
-		pub supply: u64,
-		pub last_update_timestamp: u64,
-		pub price: u64,
-	}
-	pub fn de_string_to_bytes<'de, D>(de: D) -> Result<Vec<u8>, D::Error>
-	where
-		D: Deserializer<'de>,
-	{
-		let s: &str = Deserialize::deserialize(de)?;
-		Ok(s.as_bytes().to_vec())
-	}
-
-	// TODO: Maybe it should be moved to it's own crate
-	pub trait DiaOracle {
-		/// Returns the coin info by given name
-		fn get_coin_info(name: Vec<u8>) -> Result<CoinInfo, DispatchError>;
-
-		/// Returns the price by given name
-		fn get_value(name: Vec<u8>) -> Result<u64, DispatchError>;
-	}
 
 	/// List of all authorized accounts
 	#[pallet::storage]
@@ -147,6 +119,8 @@ pub mod pallet {
 		CurrencyAdded(Vec<u8>),
 		/// Event is triggered when currency is remove from the list
 		CurrencyRemoved(Vec<u8>),
+		/// Event is triggered when batching api route is set from the list
+		BatchingApiRouteSet(Vec<u8>),
 	}
 
 	// Errors inform users that something went wrong.
@@ -162,6 +136,9 @@ pub mod pallet {
 		NoBatchingApiEndPoint,
 
 		/// Failed Deserializing to str
+		DeserializeStrError,
+
+		/// Failed Deserializing
 		DeserializeError,
 
 		/// Sending Http request to Batching Server Failed
@@ -185,7 +162,7 @@ pub mod pallet {
 		fn offchain_worker(_n: T::BlockNumber) {
 			match Self::update_prices() {
 				Ok(_) => log::info!("Updated Prices"),
-				Err(_) => log::error!("Failed to Update Prices"),
+				Err(e) => log::error!("Failed to Update Prices {:?}", e),
 			}
 		}
 	}
@@ -220,10 +197,12 @@ pub mod pallet {
 
 			let request = if supported_currencies.len() < (u16::MAX as usize) {
 				api.extend(supported_currencies);
-				let api = sp_std::str::from_utf8(&api).map_err(|_| <Error<T>>::DeserializeError)?;
+				let api =
+					sp_std::str::from_utf8(&api).map_err(|_| <Error<T>>::DeserializeStrError)?;
 				offchain::http::Request::get(api)
 			} else {
-				let api = sp_std::str::from_utf8(&api).map_err(|_| <Error<T>>::DeserializeError)?;
+				let api =
+					sp_std::str::from_utf8(&api).map_err(|_| <Error<T>>::DeserializeStrError)?;
 				offchain::http::Request::post(api, vec![&supported_currencies[..]])
 			};
 
@@ -346,6 +325,15 @@ pub mod pallet {
 			for (v, c) in coin_infos.into_iter().map(|(x, y)| (x, y)) {
 				<CoinInfosMap<T>>::insert(v, c);
 			}
+			Ok(())
+		}
+
+		#[pallet::weight(<T as Config>::WeightInfo::set_batching_api())]
+		pub fn set_batching_api(origin: OriginFor<T>, api: Vec<u8>) -> DispatchResult {
+			let origin_account_id = ensure_signed(origin)?;
+			Pallet::<T>::check_origin_rights(&origin_account_id)?;
+			<BatchingApi<T>>::put(api.clone());
+			Self::deposit_event(Event::<T>::BatchingApiRouteSet(api));
 			Ok(())
 		}
 	}

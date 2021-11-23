@@ -17,6 +17,11 @@ default-features = false
 path = '../pallets/dia-oracle'
 version = '0.1.0'
 
+[dependencies.dia-oracle-runtime-api]
+default-features = false
+path = "../pallets/dia-oracle/rpc/runtime-api"
+version = '0.1.0'
+
 [build-dependencies.substrate-wasm-builder]
 git = 'https://github.com/paritytech/substrate.git'
 tag = 'monthly-2021-10'
@@ -215,6 +220,7 @@ std = [
     'pallet-randomness-collective-flip/std',
     'pallet-sudo/std',
     'dia-oracle/std',
+    'dia-oracle-runtime-api/std',
     'pallet-timestamp/std',
     'pallet-transaction-payment-rpc-runtime-api/std',
     'pallet-transaction-payment/std',

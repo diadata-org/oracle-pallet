@@ -1517,6 +1517,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "dia-oracle-rpc"
+version = "0.1.0"
+dependencies = [
+ "dia-oracle-runtime-api",
+ "jsonrpc-core",
+ "jsonrpc-core-client",
+ "jsonrpc-derive",
+ "sp-api",
+ "sp-blockchain",
+ "sp-core",
+ "sp-runtime",
+]
+
+[[package]]
+name = "dia-oracle-runtime-api"
+version = "0.1.0"
+dependencies = [
+ "dia-oracle",
+ "frame-support",
+ "sp-api",
+ "sp-runtime",
+]
+
+[[package]]
 name = "digest"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4057,6 +4081,8 @@ dependencies = [
 name = "node-template"
 version = "3.0.0-monthly-2021-10"
 dependencies = [
+ "dia-oracle-rpc",
+ "dia-oracle-runtime-api",
  "frame-benchmarking",
  "frame-benchmarking-cli",
  "jsonrpc-core",
@@ -4083,6 +4109,7 @@ dependencies = [
  "sp-consensus-aura",
  "sp-core",
  "sp-finality-grandpa",
+ "sp-keystore",
  "sp-runtime",
  "sp-timestamp",
  "structopt",
@@ -4095,6 +4122,7 @@ name = "node-template-runtime"
 version = "3.0.0-monthly-2021-10"
 dependencies = [
  "dia-oracle",
+ "dia-oracle-runtime-api",
  "frame-benchmarking",
  "frame-executive",
  "frame-support",

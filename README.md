@@ -200,3 +200,27 @@ by appending your own. A few useful ones are as follow.
 # Check whether the code is compilable
 ./scripts/docker_run.sh cargo check
 ```
+
+
+## Steps to run Oracle
+
+1. Run node and batching server using.
+#### For node
+   
+```bash
+cargo run --release --bin node-template -- --dev --tmp --alice --validator
+```
+#### For Batching Server
+```bash
+cargo run --release --bin dia-batching-server 
+``` 
+
+2. Add Authorized Accounts using `sudo` pallet from polkadotjs
+   1. Call `authorizeAccount`, `diaOracle` Extrinsic as `Root` using `sudo` pallet.
+   
+3. Add Currencies using Authorized accounts e.g. `addCurrency`
+   
+4. Add Batching Api route.
+e.g. `http://0.0.0.0:8070/currencies/`
+
+   
