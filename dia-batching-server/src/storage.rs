@@ -9,9 +9,9 @@ use std::sync::Arc;
 pub struct CoinInfo {
 	pub symbol: SmolStr,
 	pub name: SmolStr,
-	pub supply: u64,
+	pub supply: u128,
 	pub last_update_timestamp: u64,
-	pub price: u64,
+	pub price: u128,
 }
 
 #[derive(Debug, Default)]

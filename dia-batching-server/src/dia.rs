@@ -1,8 +1,8 @@
-use std::error::Error;
-
 use async_trait::async_trait;
 use chrono::prelude::*;
 use serde::Deserialize;
+use std::error;
+use rust_decimal::Decimal;
 
 const SYMBOLS_ENDPOINT: &str = "https://api.diadata.org/v1/symbols";
 /// ### Symbols
@@ -56,35 +56,43 @@ pub struct Quotation {
 	#[serde(rename(deserialize = "Name"))]
 	pub name: String,
 	#[serde(rename(deserialize = "Price"))]
-	pub price: f64,
+	pub price: Decimal,
 	#[serde(rename(deserialize = "PriceYesterday"))]
-	pub price_yesterday: f64,
+	pub price_yesterday: Decimal,
 	#[serde(rename(deserialize = "VolumeYesterdayUSD"))]
-	pub volume_yesterday: f64,
+	pub volume_yesterday: Decimal,
 	#[serde(rename(deserialize = "Time"))]
 	pub time: DateTime<Utc>,
 }
+
 impl Default for Quotation {
 	fn default() -> Self {
 		Self { time: Utc::now(), ..Default::default() }
 	}
 }
+
 #[async_trait]
 pub trait DiaApi {
-	async fn get_symbols(&self) -> Result<Symbols, Box<dyn Error + Send + Sync>>;
-	async fn get_quotation(&self, _: &str) -> Result<Quotation, Box<dyn Error + Sync + Send>>;
+	async fn get_symbols(&self) -> Result<Symbols, Box<dyn error::Error + Send + Sync>>;
+	async fn get_quotation(
+		&self,
+		_: &str,
+	) -> Result<Quotation, Box<dyn error::Error + Sync + Send>>;
 }
 pub struct Dia;
 
 #[async_trait]
 impl DiaApi for Dia {
-	async fn get_quotation(&self, symbol: &str) -> Result<Quotation, Box<dyn Error + Send + Sync>> {
+	async fn get_quotation(
+		&self,
+		symbol: &str,
+	) -> Result<Quotation, Box<dyn error::Error + Send + Sync>> {
 		let r = reqwest::get(&format!("{}/{}", QUOTATION_ENDPOINT, symbol)).await?;
 		let q: Quotation = r.json().await?;
 		Ok(q)
 	}
 
-	async fn get_symbols(&self) -> Result<Symbols, Box<dyn Error + Sync + Send>> {
+	async fn get_symbols(&self) -> Result<Symbols, Box<dyn error::Error + Sync + Send>> {
 		let r = reqwest::get(SYMBOLS_ENDPOINT).await?;
 		let s: Symbols = r.json().await?;
 		Ok(s)
