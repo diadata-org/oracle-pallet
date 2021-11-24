@@ -22,4 +22,5 @@ smol_str = { version = "0.1.18", features = ["serde"] }
 
 tokio = { version = "0.2.25", features = ["full"] }
 
-serde_json = { version = "1.0.33", features = ["arbitrary_precision"]}
+rust_decimal = "1.17.0"
+rust_decimal_macros = "1.17"
