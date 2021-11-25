@@ -1494,6 +1494,8 @@ dependencies = [
  "log",
  "pretty_env_logger",
  "reqwest",
+ "rust_decimal",
+ "rust_decimal_macros",
  "serde",
  "smol_str",
  "tokio 0.2.25",
@@ -5436,6 +5438,27 @@ checksum = "ffc936cf8a7ea60c58f030fd36a612a48f440610214dc54bc36431f9ea0c3efb"
 dependencies = [
  "libc",
  "winapi 0.3.9",
+]
+
+[[package]]
+name = "rust_decimal"
+version = "1.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "353775f96a1f400edcca737f843cb201af3645912e741e64456a257c770173e8"
+dependencies = [
+ "arrayvec 0.5.2",
+ "num-traits",
+ "serde",
+]
+
+[[package]]
+name = "rust_decimal_macros"
+version = "1.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d0847e5bbcded958275518f18a567fea27e53b22b52b549cc3557c88d780b22e"
+dependencies = [
+ "quote",
+ "rust_decimal",
 ]
 
 [[package]]
