@@ -154,7 +154,7 @@ fn get_coin_info_should_work() {
 		let coin_info = DOracle::get_coin_info(vec![2, 2, 2]);
 
 		assert_eq!(coin_info, Ok(example_info));
-		assert_eq!(Ok(9), DOracle::get_value(vec![2, 2, 2]));
+		assert_eq!(Ok(9), DOracle::get_value(vec![2, 2, 2]).map(|x| x.value));
 	})
 }
 
@@ -203,8 +203,8 @@ fn get_value_in_coin_info_should_work() {
 		let coin_info_one = DOracle::get_value(vec![1, 2, 3]);
 		let coin_info_two = DOracle::get_value(vec![2, 2, 2]);
 
-		assert_eq!(coin_info_one, Ok(CoinInfo::default().price));
-		assert_eq!(coin_info_two, Ok(example_info.price));
+		assert_eq!(coin_info_one.map(|x| x.value), Ok(CoinInfo::default().price));
+		assert_eq!(coin_info_two.map(|x| x.value), Ok(example_info.price));
 	})
 }
 

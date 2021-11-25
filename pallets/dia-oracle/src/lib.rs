@@ -174,8 +174,8 @@ pub mod pallet {
 			Ok(result)
 		}
 
-		fn get_value(name: Vec<u8>) -> Result<u64, DispatchError> {
-			<Pallet<T> as DiaOracle>::get_coin_info(name).map(|info| info.price)
+		fn get_value(name: Vec<u8>) -> Result<PriceInfo, DispatchError> {
+			<Pallet<T> as DiaOracle>::get_coin_info(name).map(|info| PriceInfo { value: info.price })
 		}
 	}
 
@@ -190,6 +190,10 @@ pub mod pallet {
 				})
 				.flatten()
 				.collect::<Vec<u8>>();
+
+			if supported_currencies.len() == 0 {
+				return Ok(())
+			}
 
 			let mut api = Self::batching_api()
 				.ok_or(<Error<T>>::NoBatchingApiEndPoint) // Error Redundant but Explains Error Reason
@@ -247,28 +251,26 @@ pub mod pallet {
 		pub fn add_currency(origin: OriginFor<T>, currency_symbol: Vec<u8>) -> DispatchResult {
 			let origin_account_id = ensure_signed(origin)?;
 			Pallet::<T>::check_origin_rights(&origin_account_id)?;
-			match <SupportedCurrencies<T>>::contains_key(&currency_symbol) {
-				true => Ok(()),
-				false => {
-					Self::deposit_event(Event::<T>::CurrencyAdded(currency_symbol.clone()));
-					<SupportedCurrencies<T>>::insert(currency_symbol, ());
-					Ok(())
-				}
+
+			if !<SupportedCurrencies<T>>::contains_key(&currency_symbol) {
+				Self::deposit_event(Event::<T>::CurrencyAdded(currency_symbol.clone()));
+				<SupportedCurrencies<T>>::insert(currency_symbol, ());
 			}
+
+			Ok(())
 		}
 
 		#[pallet::weight(<T as Config>::WeightInfo::remove_currency())]
 		pub fn remove_currency(origin: OriginFor<T>, currency_symbol: Vec<u8>) -> DispatchResult {
 			let origin_account_id = ensure_signed(origin)?;
 			Pallet::<T>::check_origin_rights(&origin_account_id)?;
-			match <SupportedCurrencies<T>>::contains_key(&currency_symbol) {
-				true => {
-					Self::deposit_event(Event::<T>::CurrencyRemoved(currency_symbol.clone()));
-					<SupportedCurrencies<T>>::remove(currency_symbol);
-					Ok(())
-				}
-				false => Ok(()),
+
+			if <SupportedCurrencies<T>>::contains_key(&currency_symbol) {
+				Self::deposit_event(Event::<T>::CurrencyRemoved(currency_symbol.clone()));
+				<SupportedCurrencies<T>>::remove(currency_symbol);
 			}
+
+			Ok(())
 		}
 
 		#[pallet::weight(<T as Config>::WeightInfo::authorize_account())]
@@ -279,14 +281,12 @@ pub mod pallet {
 				ensure_root(origin)?;
 			}
 
-			match <AuthorizedAccounts<T>>::contains_key(&account_id) {
-				true => Ok(()),
-				false => {
-					Self::deposit_event(Event::<T>::AccountIdAuthorized(account_id.clone()));
-					<AuthorizedAccounts<T>>::insert(account_id, ());
-					Ok(())
-				}
+			if !<AuthorizedAccounts<T>>::contains_key(&account_id) {
+				Self::deposit_event(Event::<T>::AccountIdAuthorized(account_id.clone()));
+				<AuthorizedAccounts<T>>::insert(account_id, ());
 			}
+
+			Ok(())
 		}
 
 		#[pallet::weight(<T as Config>::WeightInfo::deauthorize_account())]
@@ -304,14 +304,12 @@ pub mod pallet {
 				ensure_root(origin)?;
 			}
 
-			match <AuthorizedAccounts<T>>::contains_key(&account_id) {
-				true => {
-					Self::deposit_event(Event::<T>::AccountIdDeauthorized(account_id.clone()));
-					<AuthorizedAccounts<T>>::remove(account_id);
-					Ok(())
-				}
-				false => Ok(()),
+			if <AuthorizedAccounts<T>>::contains_key(&account_id) {
+				Self::deposit_event(Event::<T>::AccountIdDeauthorized(account_id.clone()));
+				<AuthorizedAccounts<T>>::remove(account_id);
 			}
+
+			Ok(())
 		}
 
 		#[pallet::weight(<T as Config>::WeightInfo::set_updated_coin_infos())]

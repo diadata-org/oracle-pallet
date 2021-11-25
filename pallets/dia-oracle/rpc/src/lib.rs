@@ -1,4 +1,4 @@
-use dia_oracle_runtime_api::CoinInfo;
+use dia_oracle_runtime_api::{CoinInfo, PriceInfo};
 use jsonrpc_core::{Error as RpcError, ErrorCode, Result};
 use jsonrpc_derive::rpc;
 use sp_api::ProvideRuntimeApi;
@@ -15,7 +15,7 @@ pub trait DiaOracleApi<BlockHash> {
 	#[rpc(name = "dia_getCoinInfo")]
 	fn get_coin_info(&self, name: Bytes, at: Option<BlockHash>) -> Result<CoinInfo>;
 	#[rpc(name = "dia_getValue")]
-	fn get_value(&self, name: Bytes, at: Option<BlockHash>) -> Result<u64>;
+	fn get_value(&self, name: Bytes, at: Option<BlockHash>) -> Result<PriceInfo>;
 }
 
 /// A struct that implements the [`DiaOracleApi`].
@@ -76,7 +76,7 @@ where
 		Ok(r)
 	}
 
-	fn get_value(&self, name: Bytes, at: Option<<Block as BlockT>::Hash>) -> Result<u64> {
+	fn get_value(&self, name: Bytes, at: Option<<Block as BlockT>::Hash>) -> Result<PriceInfo> {
 		let api = self.client.runtime_api();
 		let at = BlockId::hash(at.unwrap_or_else(||
 			// If the block hash is not supplied assume the best block.

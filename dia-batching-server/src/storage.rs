@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CoinInfo {
 	pub symbol: SmolStr,
 	pub name: SmolStr,

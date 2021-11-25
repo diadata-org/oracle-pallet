@@ -123,11 +123,7 @@ mod tests {
 
 		let resp = test::call_service(&mut app, req).await;
 
-		assert_eq!(resp.status(), http::StatusCode::OK);
-
-		let r: Vec<CoinInfo> = test::read_body_json(resp).await;
-
-		assert_eq!(r.len(), 0);
+		assert_eq!(resp.status(), http::StatusCode::NOT_FOUND);
 	}
 
 	#[tokio::test]
