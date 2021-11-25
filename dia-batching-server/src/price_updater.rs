@@ -3,6 +3,9 @@ use crate::storage::{CoinInfo, CoinInfoStorage};
 use log::{error, info};
 use std::{error::Error, sync::Arc};
 use std::collections::HashSet;
+use std::fmt::{Display, Formatter};
+use rust_decimal::Decimal;
+use rust_decimal::prelude::ToPrimitive;
 
 pub async fn run_update_prices_loop<T>(
 	storage: Arc<CoinInfoStorage>,
@@ -30,6 +33,29 @@ where
 	Ok(())
 }
 
+fn convert_to_coin_info(value: Quotation) -> Result<CoinInfo, Box<dyn Error + Sync + Send>> {
+	let Quotation { name, symbol, price, time, volume_yesterday, .. } = value;
+
+	let price =
+		convert_decimal_to_u128(&price)?;
+	let supply =
+		convert_decimal_to_u128(&volume_yesterday)?;
+
+	let coin_info = CoinInfo {
+		name: name.into(),
+		symbol: symbol.into(),
+		price,
+		last_update_timestamp: time.timestamp().unsigned_abs(),
+		supply
+	};
+
+	info!("Coin Price: {:#?}", price);
+	info!("Coin Supply: {:#?}", volume_yesterday);
+	info!("Coin Info : {:#?}", coin_info);
+
+	Ok(coin_info)
+}
+
 async fn update_prices<T>(coins: Arc<CoinInfoStorage>, supported: &Option<HashSet<String>>, api: &T, rate: std::time::Duration)
 where
 	T: DiaApi + Send + Sync + 'static,
@@ -40,26 +66,8 @@ where
 		let mut currencies = vec![];
 
 		for s in symbols.iter().filter(|x| supported.as_ref().map(|set| set.contains(x.as_str())).unwrap_or(true)) {
-			match api.get_quotation(s).await {
-
-				Ok(Quotation { name, symbol, price, time, volume_yesterday, .. }) => {
-					let converted_price =
-						convert_str_to_u128(&price.to_string());
-					let converted_supply =
-						convert_str_to_u128(&volume_yesterday.to_string());
-
-					let coin_info = CoinInfo {
-						name: name.into(),
-						symbol: symbol.into(),
-						price: convert_f64_to_u64(price), // Converting f64 to u64
-						last_update_timestamp: time.timestamp().unsigned_abs(),
-						supply: convert_f64_to_u64(volume_yesterday), // Converting f64 to u64
-					};
-
-					info!("Coin Price: {:#?}", price);
-					info!("Coin Supply: {:#?}", volume_yesterday);
-					info!("Coin Info : {:#?}", coin_info);
-
+			match api.get_quotation(s).await.and_then(convert_to_coin_info) {
+				Ok(coin_info) => {
 					currencies.push(coin_info);
 				},
 				Err(err) => {
@@ -74,44 +82,28 @@ where
 }
 #[derive(Debug)]
 pub enum ConvertingError {
-	ParseIntError,
-	InvalidInput,
+	DecimalTooLarge,
 }
 
-fn convert_str_to_u128(input: &str) -> Result<u128, ConvertingError> {
-	match input.split(".").collect::<Vec<_>>()[..] {
-		[major] => Ok(major.parse::<u128>().map_err(|_| ConvertingError::ParseIntError)?
-			* 10u128.pow(12 as u32)),
-
-		[major, minor] => {
-			let major_parsed_number =
-				major.parse::<u128>().map_err(|_| ConvertingError::ParseIntError)?;
-
-			let minor_parsed_number = precision_digits(minor).map_err(|e| e)?;
-
-			Ok((major_parsed_number * 10u128.pow(12 as u32)).saturating_add(minor_parsed_number))
+impl Display for ConvertingError {
+	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+		match self {
+			ConvertingError::DecimalTooLarge => write!(f, "Decimal given is too large"),
 		}
-		// ultimately it won't run to this option
-		_ => Err(ConvertingError::InvalidInput),
 	}
 }
 
-fn precision_digits(minor: &str) -> Result<u128, ConvertingError> {
-	const PRECISION_IN_DIGITS: usize = 12;
+impl Error for ConvertingError { }
 
-	let range =
-		if minor.len() < PRECISION_IN_DIGITS { ..minor.len() } else { ..PRECISION_IN_DIGITS };
+fn convert_decimal_to_u128(input: &Decimal) -> Result<u128, ConvertingError> {
+	let fract = (input.fract() * Decimal::from(1_000_000_000_000_u128))
+		.to_u128()
+		.ok_or(ConvertingError::DecimalTooLarge)?;
+	let trunc = (input.trunc() * Decimal::from(1_000_000_000_000_u128))
+		.to_u128()
+		.ok_or(ConvertingError::DecimalTooLarge)?;
 
-	let twelve_digits = minor.get(range).ok_or(ConvertingError::ParseIntError)?;
-
-	let parsed_number =
-		twelve_digits.parse::<u128>().map_err(|_| ConvertingError::ParseIntError)?;
-
-	if minor.len() < PRECISION_IN_DIGITS {
-		return Ok(parsed_number * 10u128.pow((PRECISION_IN_DIGITS - minor.len()) as u32));
-	}
-
-	Ok(parsed_number)
+	Ok(trunc.saturating_add(fract))
 }
 
 #[cfg(test)]
@@ -290,8 +282,9 @@ mod tests {
 		let mock_api = MockDia::new();
 		let storage = Arc::new(CoinInfoStorage::default());
 		let coins = Arc::clone(&storage);
+		let all_currencies = None;
 
-		update_prices(coins, &mock_api, std::time::Duration::from_secs(1)).await;
+		update_prices(coins,  &all_currencies, &mock_api, std::time::Duration::from_secs(1)).await;
 
 		let c = storage.get_currencies_by_symbols(&["ADA", "XRP", "DOGE"]);
 

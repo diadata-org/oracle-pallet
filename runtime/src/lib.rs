@@ -505,7 +505,7 @@ impl_runtime_apis! {
 	}
 
 		impl dia_oracle_runtime_api::DiaOracleApi<Block> for Runtime{
-			fn get_value(name: frame_support::sp_std::vec::Vec<u8>)-> Result<u64,sp_runtime::DispatchError>{
+			fn get_value(name: frame_support::sp_std::vec::Vec<u8>)-> Result<dia_oracle_runtime_api::PriceInfo, sp_runtime::DispatchError>{
 				DiaOracleModule::get_value(name)
 			}
 

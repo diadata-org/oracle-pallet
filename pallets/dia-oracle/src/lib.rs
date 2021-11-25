@@ -174,8 +174,8 @@ pub mod pallet {
 			Ok(result)
 		}
 
-		fn get_value(name: Vec<u8>) -> Result<u64, DispatchError> {
-			<Pallet<T> as DiaOracle>::get_coin_info(name).map(|info| info.price)
+		fn get_value(name: Vec<u8>) -> Result<PriceInfo, DispatchError> {
+			<Pallet<T> as DiaOracle>::get_coin_info(name).map(|info| PriceInfo { value: info.price })
 		}
 	}
 
