@@ -42,9 +42,8 @@ where
 			if let Ok(Quotation { name, symbol, price, time, volume_yesterday, .. }) =
 				api.get_quotation(s).await
 			{
-				let converted_price = convert_str_to_u128(&price.to_string()).map_err(|e| e);
-				let converted_supply =
-					convert_str_to_u128(&volume_yesterday.to_string()).map_err(|e| e);
+				let converted_price = convert_str_to_u128(&price.to_string());
+				let converted_supply = convert_str_to_u128(&volume_yesterday.to_string());
 
 				match (converted_price, converted_supply) {
 					(Ok(x), Ok(y)) => {
