@@ -157,6 +157,40 @@ pub mod pallet {
 		BadOrigin,
 	}
 
+	#[pallet::genesis_config]
+	pub struct GenesisConfig<T: Config> {
+		pub authorized_accounts: Vec<T::AccountId>,
+		pub supported_currencies: Vec<Vec<u8>>,
+		pub batching_api: Vec<u8>,
+		pub coin_infos_map: Vec<(Vec<u8>, CoinInfo)>,
+	}
+
+	#[pallet::genesis_build]
+	impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
+		fn build(&self) {
+			for currency in &self.supported_currencies {
+				<SupportedCurrencies<T>>::insert(currency.clone(), ());
+			}
+
+			for account_id in &self.authorized_accounts {
+				<AuthorizedAccounts<T>>::insert(account_id.clone(), ());
+			}
+			<BatchingApi<T>>::put(self.batching_api.clone());
+		}
+	}
+
+	#[cfg(feature = "std")]
+	impl<T: Config> Default for GenesisConfig<T> {
+		fn default() -> Self {
+			Self {
+				authorized_accounts: Default::default(),
+				supported_currencies: Default::default(),
+				batching_api: Default::default(),
+				coin_infos_map: Default::default(),
+			}
+		}
+	}
+
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn offchain_worker(_n: T::BlockNumber) {

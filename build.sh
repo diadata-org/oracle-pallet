@@ -16,3 +16,4 @@ docker images | grep ${PROJECT}
 echo -e "\nIf you just built version ${VERSION}, you may want to update your tag:"
 echo " $ docker tag ${USER}/${PROJECT}:$VERSION ${USER}/${PROJECT}:${VERSION}"
 
+docker-compose up
