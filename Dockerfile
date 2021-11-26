@@ -34,6 +34,7 @@ WORKDIR /dia
 
 COPY --from=builder  /dia/target/release/node-template /dia
 COPY --from=builder  /dia/target/release/dia-batching-server /dia
+COPY --from=builder  /dia/diaChain.json /dia
 
 RUN useradd -m -u 1000 -U -s /bin/sh -d /dia dia && \
   mkdir -p /dia/.local/share && \

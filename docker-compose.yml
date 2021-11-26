@@ -8,7 +8,7 @@ services:
       - "9933:9933"
       - "9945:9945"
       - "30333:30333"
-    command: bash -c "/dia/node-template --base-path /data --chain local --unsafe-rpc-external --unsafe-ws-external --alice --port 30333 --ws-port 9945 --rpc-port 9933 --node-key 0000000000000000000000000000000000000000000000000000000000000001 --validator"
+    command: bash -c "/dia/node-template --base-path /data --chain=diaChain.json --unsafe-rpc-external --unsafe-ws-external --alice --port 30333 --ws-port 9945 --rpc-port 9933 --node-key 0000000000000000000000000000000000000000000000000000000000000001 --validator"
     networks:
       testing_net:
           ipv4_address: 172.28.1.1
