@@ -154,7 +154,7 @@ fn testnet_genesis(
 		dia_oracle_module: DiaOracleModuleConfig {
 			authorized_accounts: vec![root_key],
 			supported_currencies: vec![b"BTC".to_vec()],
-			batching_api: b"http://172.28.1.2:8070/currencies/".to_vec(),
+			batching_api: b"http://localhost:8070/currencies/".to_vec(),
 			coin_infos_map: vec![],
 		},
 	}
