@@ -1,6 +1,6 @@
 use node_template_runtime::{
-	AccountId, AuraConfig, BalancesConfig, GenesisConfig, GrandpaConfig, Signature, SudoConfig,
-	SystemConfig, WASM_BINARY,
+	AccountId, AuraConfig, BalancesConfig, DiaOracleModuleConfig, GenesisConfig, GrandpaConfig,
+	Signature, SudoConfig, SystemConfig, WASM_BINARY,
 };
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
@@ -148,7 +148,14 @@ fn testnet_genesis(
 		},
 		sudo: SudoConfig {
 			// Assign network admin rights.
-			key: root_key,
+			key: root_key.clone(),
+		},
+
+		dia_oracle_module: DiaOracleModuleConfig {
+			authorized_accounts: vec![root_key],
+			supported_currencies: vec![b"BTC".to_vec()],
+			batching_api: b"http://localhost:8070/currencies/".to_vec(),
+			coin_infos_map: vec![],
 		},
 	}
 }

@@ -223,4 +223,8 @@ cargo run --release --bin dia-batching-server
 4. Add Batching Api route.
 e.g. `http://0.0.0.0:8070/currencies/`
 
-   
+
+### For Using chain spec in node
+```bash
+/dia/node-template --base-path /data --chain=diaChain.json
+```

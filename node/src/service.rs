@@ -441,6 +441,17 @@ pub fn new_light(mut config: Configuration) -> Result<TaskManager, ServiceError>
 			warp_sync: Some(warp_sync),
 		})?;
 
+	let keystore = keystore_container.sync_keystore();
+	if config.offchain_worker.enabled {
+		// Initialize seed for signing transaction using off-chain workers.
+
+		sp_keystore::SyncCryptoStore::sr25519_generate_new(
+			&*keystore,
+			node_template_runtime::dia_oracle::crypto::KEY_TYPE,
+			Some("//Alice"),
+		)
+		.expect("Creating key with account Alice should succeed.");
+	}
 	if config.offchain_worker.enabled {
 		sc_service::build_offchain_workers(
 			&config,
@@ -459,7 +470,7 @@ pub fn new_light(mut config: Configuration) -> Result<TaskManager, ServiceError>
 			justification_period: 512,
 			name: Some(name),
 			observer_enabled: false,
-			keystore: None,
+			keystore: Some(keystore),
 			local_role: config.role.clone(),
 			telemetry: telemetry.as_ref().map(|x| x.handle()),
 		};
