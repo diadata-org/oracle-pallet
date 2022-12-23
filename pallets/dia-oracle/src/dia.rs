@@ -1,6 +1,9 @@
 use codec::{Decode, Encode};
 use frame_support::{sp_runtime::DispatchError, sp_std::vec::Vec};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize};
+
+#[cfg(feature = "std")]
+use serde::Serializer;
 
 // TODO: Maybe it should be moved to it's own crate
 pub trait DiaOracle {
@@ -42,7 +45,6 @@ where
 	Ok(s.as_bytes().to_vec())
 }
 
-
 #[derive(Eq, PartialEq, Encode, Decode, Default)]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub struct PriceInfo {
@@ -51,15 +53,23 @@ pub struct PriceInfo {
 
 #[cfg(feature = "std")]
 impl Serialize for PriceInfo {
-	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+	where
+		S: Serializer,
+	{
 		serializer.serialize_str(&self.value.to_string())
 	}
 }
 
 #[cfg(feature = "std")]
 impl<'de> Deserialize<'de> for PriceInfo {
-	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {
+	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+	where
+		D: Deserializer<'de>,
+	{
 		let s = String::deserialize(deserializer)?;
-		s.parse::<u128>().map(|x| PriceInfo { value: x }).map_err(|_| serde::de::Error::custom("Parse from str failed"))
+		s.parse::<u128>()
+			.map(|x| PriceInfo { value: x })
+			.map_err(|_| serde::de::Error::custom("Parse from str failed"))
 	}
 }

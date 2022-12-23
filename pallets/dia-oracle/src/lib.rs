@@ -14,6 +14,7 @@ pub(crate) mod mock;
 pub mod dia;
 pub use dia::*;
 pub mod weights;
+pub use sp_std::convert::TryInto;
 pub use weights::WeightInfo;
 
 /// Based on the above `KeyTypeId` we need to generate a pallet-specific crypto type wrappers.
@@ -28,6 +29,8 @@ pub mod crypto {
 		MultiSignature, MultiSigner,
 	};
 	use sp_core::sr25519::Signature as Sr25519Signature;
+	use sp_std::convert::TryFrom;
+
 	app_crypto!(sr25519, KEY_TYPE);
 
 	pub struct DiaAuthId;
@@ -71,10 +74,10 @@ pub mod pallet {
 	#[pallet::config]
 	pub trait Config: frame_system::Config + CreateSignedTransaction<Call<Self>> {
 		/// The overarching event type.
-		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
+		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
 		/// The overarching dispatch call type.
-		type Call: From<Call<Self>>;
+		type RuntimeCall: From<Call<Self>>;
 
 		/// The identifier type for an offchain worker.
 		type AuthorityId: AppCrypto<Self::Public, Self::Signature>;
@@ -85,6 +88,7 @@ pub mod pallet {
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
+	#[pallet::without_storage_info]
 	pub struct Pallet<T>(_);
 
 	/// List of all authorized accounts
@@ -209,7 +213,8 @@ pub mod pallet {
 		}
 
 		fn get_value(name: Vec<u8>) -> Result<PriceInfo, DispatchError> {
-			<Pallet<T> as DiaOracle>::get_coin_info(name).map(|info| PriceInfo { value: info.price })
+			<Pallet<T> as DiaOracle>::get_coin_info(name)
+				.map(|info| PriceInfo { value: info.price })
 		}
 	}
 
@@ -226,7 +231,7 @@ pub mod pallet {
 				.collect::<Vec<u8>>();
 
 			if supported_currencies.len() == 0 {
-				return Ok(())
+				return Ok(());
 			}
 
 			let mut api = Self::batching_api()

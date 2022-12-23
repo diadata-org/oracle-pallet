@@ -14,20 +14,17 @@ dia-oracle = { version = "0.1.0", default-features = false, path = "../../../dia
 [dependencies.sp-api]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
-tag = 'monthly-2021-10'
-version = '4.0.0-dev'
+branch = "polkadot-v0.9.35"
 
 [dependencies.sp-runtime]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
-tag = 'monthly-2021-10'
-version = '4.0.0-dev'
+branch = "polkadot-v0.9.35"
 
 [dependencies.frame-support]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
-tag = 'monthly-2021-10'
-version = '4.0.0-dev'
+branch = "polkadot-v0.9.35"
 
 
 [features]
