@@ -1,11 +1,11 @@
 use crate::dia::{DiaApi, Quotation, Symbols};
 use crate::storage::{CoinInfo, CoinInfoStorage};
 use log::{error, info};
-use std::{error::Error, sync::Arc};
+use rust_decimal::prelude::ToPrimitive;
+use rust_decimal::Decimal;
 use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
-use rust_decimal::Decimal;
-use rust_decimal::prelude::ToPrimitive;
+use std::{error::Error, sync::Arc};
 
 pub async fn run_update_prices_loop<T>(
 	storage: Arc<CoinInfoStorage>,
@@ -36,17 +36,15 @@ where
 fn convert_to_coin_info(value: Quotation) -> Result<CoinInfo, Box<dyn Error + Sync + Send>> {
 	let Quotation { name, symbol, price, time, volume_yesterday, .. } = value;
 
-	let price =
-		convert_decimal_to_u128(&price)?;
-	let supply =
-		convert_decimal_to_u128(&volume_yesterday)?;
+	let price = convert_decimal_to_u128(&price)?;
+	let supply = convert_decimal_to_u128(&volume_yesterday)?;
 
 	let coin_info = CoinInfo {
 		name: name.into(),
 		symbol: symbol.into(),
 		price,
 		last_update_timestamp: time.timestamp().unsigned_abs(),
-		supply
+		supply,
 	};
 
 	info!("Coin Price: {:#?}", price);
@@ -56,8 +54,12 @@ fn convert_to_coin_info(value: Quotation) -> Result<CoinInfo, Box<dyn Error + Sy
 	Ok(coin_info)
 }
 
-async fn update_prices<T>(coins: Arc<CoinInfoStorage>, supported: &Option<HashSet<String>>, api: &T, rate: std::time::Duration)
-where
+async fn update_prices<T>(
+	coins: Arc<CoinInfoStorage>,
+	supported: &Option<HashSet<String>>,
+	api: &T,
+	rate: std::time::Duration,
+) where
 	T: DiaApi + Send + Sync + 'static,
 {
 	if let Ok(Symbols { symbols }) = api.get_symbols().await {
@@ -65,14 +67,17 @@ where
 
 		let mut currencies = vec![];
 
-		for s in symbols.iter().filter(|x| supported.as_ref().map(|set| set.contains(x.as_str())).unwrap_or(true)) {
+		for s in symbols
+			.iter()
+			.filter(|x| supported.as_ref().map(|set| set.contains(x.as_str())).unwrap_or(true))
+		{
 			match api.get_quotation(s).await.and_then(convert_to_coin_info) {
 				Ok(coin_info) => {
 					currencies.push(coin_info);
 				},
 				Err(err) => {
 					error!("Error while retrieving quotation for {}: {}", s, err)
-				}
+				},
 			}
 			tokio::time::delay_for(rate).await;
 		}
@@ -93,7 +98,7 @@ impl Display for ConvertingError {
 	}
 }
 
-impl Error for ConvertingError { }
+impl Error for ConvertingError {}
 
 fn convert_decimal_to_u128(input: &Decimal) -> Result<u128, ConvertingError> {
 	let fract = (input.fract() * Decimal::from(1_000_000_000_000_u128))
@@ -284,7 +289,7 @@ mod tests {
 		let coins = Arc::clone(&storage);
 		let all_currencies = None;
 
-		update_prices(coins,  &all_currencies, &mock_api, std::time::Duration::from_secs(1)).await;
+		update_prices(coins, &all_currencies, &mock_api, std::time::Duration::from_secs(1)).await;
 
 		let c = storage.get_currencies_by_symbols(&["ADA", "XRP", "DOGE"]);
 
