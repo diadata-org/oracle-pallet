@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use chrono::prelude::*;
+use rust_decimal::Decimal;
 use serde::Deserialize;
 use std::error;
-use rust_decimal::Decimal;
 
 const SYMBOLS_ENDPOINT: &str = "https://api.diadata.org/v1/symbols";
 /// ### Symbols
@@ -67,7 +67,14 @@ pub struct Quotation {
 
 impl Default for Quotation {
 	fn default() -> Self {
-		Self { time: Utc::now(), ..Default::default() }
+		Self {
+			time: Utc::now(),
+			symbol: Default::default(),
+			name: Default::default(),
+			price: Default::default(),
+			price_yesterday: Default::default(),
+			volume_yesterday: Default::default(),
+		}
 	}
 }
 

@@ -10,9 +10,7 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 dia-oracle-runtime-api = { version = "0.1.0", default-features = false, path = "./runtime-api" }
-jsonrpc-core = "18.0.0"
-jsonrpc-core-client = "18.0.0"
-jsonrpc-derive = "18.0.0"
+jsonrpsee = { version = "0.16.2", features = ["client-core", "server", "macros"] }
 
 
 [dependencies.sp-api]
