@@ -1,5 +1,6 @@
-use crate::dia::{DiaApi, Quotation, Symbols};
+use crate::dia::{DiaApi, Quotation};
 use crate::storage::{CoinInfo, CoinInfoStorage};
+use crate::AssetSpecifier;
 use log::{error, info};
 use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
@@ -9,7 +10,7 @@ use std::{error::Error, sync::Arc};
 
 pub async fn run_update_prices_loop<T>(
 	storage: Arc<CoinInfoStorage>,
-	supported_currencies: Option<HashSet<String>>,
+	maybe_supported_currencies: Option<HashSet<AssetSpecifier>>,
 	rate: std::time::Duration,
 	duration: std::time::Duration,
 	api: T,
@@ -24,7 +25,7 @@ where
 
 			let coins = Arc::clone(&coins);
 
-			update_prices(coins, &supported_currencies, &api, rate).await;
+			update_prices(coins, &maybe_supported_currencies, &api, rate).await;
 
 			tokio::time::delay_for(duration.saturating_sub(time_elapsed.elapsed())).await;
 		}
@@ -56,31 +57,39 @@ fn convert_to_coin_info(value: Quotation) -> Result<CoinInfo, Box<dyn Error + Sy
 
 async fn update_prices<T>(
 	coins: Arc<CoinInfoStorage>,
-	supported: &Option<HashSet<String>>,
+	maybe_supported_currencies: &Option<HashSet<AssetSpecifier>>,
 	api: &T,
 	rate: std::time::Duration,
 ) where
 	T: DiaApi + Send + Sync + 'static,
 {
-	if let Ok(Symbols { symbols }) = api.get_symbols().await {
-		info!("No. of currencies to retrieve : {}", symbols.len());
+	if let Ok(quotable_assets) = api.get_quotable_assets().await {
+		info!("No. of quotable assets to retrieve : {}", quotable_assets.len());
 
 		let mut currencies = vec![];
 
-		for s in symbols
-			.iter()
-			.filter(|x| supported.as_ref().map(|set| set.contains(x.as_str())).unwrap_or(true))
-		{
-			match api.get_quotation(s).await.and_then(convert_to_coin_info) {
-				Ok(coin_info) => {
-					currencies.push(coin_info);
-				},
-				Err(err) => {
-					error!("Error while retrieving quotation for {}: {}", s, err)
-				},
+		for quotable_asset in quotable_assets {
+			let asset = AssetSpecifier {
+				blockchain: quotable_asset.asset.blockchain.clone(),
+				symbol: quotable_asset.asset.symbol.clone(),
+			};
+
+			if maybe_supported_currencies
+				.as_ref()
+				.map_or(true, |supported| supported.contains(&asset))
+			{
+				match api.get_quotation(&quotable_asset).await.and_then(convert_to_coin_info) {
+					Ok(coin_info) => {
+						currencies.push(coin_info);
+					},
+					Err(err) => {
+						error!("Error while retrieving quotation for {:?}: {}", quotable_asset, err)
+					},
+				}
+				tokio::time::delay_for(rate).await;
 			}
-			tokio::time::delay_for(rate).await;
 		}
+
 		coins.replace_currencies_by_symbols(currencies);
 		info!("Currencies Updated");
 	}
@@ -113,6 +122,7 @@ fn convert_decimal_to_u128(input: &Decimal) -> Result<u128, ConvertingError> {
 
 #[cfg(test)]
 mod tests {
+	use crate::dia::{Asset, QuotedAsset};
 	use std::{collections::HashMap, error::Error, sync::Arc};
 
 	use async_trait::async_trait;
@@ -121,15 +131,15 @@ mod tests {
 
 	use super::*;
 
-	struct MockDia<'a> {
-		quotation: HashMap<&'a str, Quotation>,
+	struct MockDia {
+		quotation: HashMap<AssetSpecifier, Quotation>,
 	}
 
-	impl<'a> MockDia<'a> {
+	impl MockDia {
 		pub fn new() -> Self {
 			let mut quotation = HashMap::new();
 			quotation.insert(
-				"BTC",
+				AssetSpecifier { blockchain: "Bitcoin".into(), symbol: "BTC".into() },
 				Quotation {
 					name: "BTC".into(),
 					price: dec!(1.000000000000),
@@ -137,50 +147,51 @@ mod tests {
 					symbol: "BTC".into(),
 					time: Utc::now(),
 					volume_yesterday: dec!(1.000000000000),
+					address: "0x0000000000000000000000000000000000000000".into(),
+					blockchain: "Bitcoin".into(),
+					source: "diadata.org".into(),
 				},
 			);
 			quotation.insert(
-				"ETH",
+				AssetSpecifier { blockchain: "Ethereum".into(), symbol: "ETH".into() },
 				Quotation {
-					name: "ETH".into(),
+					name: "BTC".into(),
 					price: dec!(1.000000000000),
 					price_yesterday: dec!(1.000000000000),
-					symbol: "ETH".into(),
+					symbol: "BTC".into(),
 					time: Utc::now(),
 					volume_yesterday: dec!(1.000000000000),
+					address: "0x0000000000000000000000000000000000000000".into(),
+					blockchain: "Bitcoin".into(),
+					source: "diadata.org".into(),
 				},
 			);
 			quotation.insert(
-				"ADA",
+				AssetSpecifier { blockchain: "Ethereum".into(), symbol: "USTD".into() },
 				Quotation {
-					name: "ADA".into(),
-					price: dec!(0),
+					name: "BTC".into(),
+					price: dec!(1.000000000000),
 					price_yesterday: dec!(1.000000000000),
-					symbol: "ADA".into(),
+					symbol: "BTC".into(),
 					time: Utc::now(),
-					volume_yesterday: dec!(0.123456789012345),
+					volume_yesterday: dec!(1.000000000000),
+					address: "0x0000000000000000000000000000000000000000".into(),
+					blockchain: "Bitcoin".into(),
+					source: "diadata.org".into(),
 				},
 			);
 			quotation.insert(
-				"XRP",
+				AssetSpecifier { blockchain: "Ethereum".into(), symbol: "USDC".into() },
 				Quotation {
-					name: "XRP".into(),
-					price: dec!(123456789.123456789012345),
+					name: "BTC".into(),
+					price: dec!(1.000000000000),
 					price_yesterday: dec!(1.000000000000),
-					symbol: "XRP".into(),
+					symbol: "BTC".into(),
 					time: Utc::now(),
-					volume_yesterday: dec!(298134760),
-				},
-			);
-			quotation.insert(
-				"DOGE",
-				Quotation {
-					name: "DOGE".into(),
-					price: dec!(1.000000000001),
-					price_yesterday: dec!(1.000000000000),
-					symbol: "DOGE".into(),
-					time: Utc::now(),
-					volume_yesterday: dec!(0.000000000001),
+					volume_yesterday: dec!(1.000000000000),
+					address: "0x0000000000000000000000000000000000000000".into(),
+					blockchain: "Bitcoin".into(),
+					source: "diadata.org".into(),
 				},
 			);
 			Self { quotation }
@@ -188,24 +199,64 @@ mod tests {
 	}
 
 	#[async_trait]
-	impl<'a> DiaApi for MockDia<'a> {
+	impl DiaApi for MockDia {
 		async fn get_quotation(
 			&self,
-			symbol: &str,
+			asset: &QuotedAsset,
 		) -> Result<Quotation, Box<dyn Error + Send + Sync>> {
-			Ok(self.quotation.get(symbol).ok_or("Error Finding Quotation".to_string())?.clone())
+			let QuotedAsset { asset, volume: _ } = asset;
+			let asset = AssetSpecifier {
+				blockchain: asset.blockchain.clone(),
+				symbol: asset.symbol.clone(),
+			};
+			Ok(self.quotation.get(&asset).ok_or("Error Finding Quotation".to_string())?.clone())
 		}
 
-		async fn get_symbols(&self) -> Result<Symbols, Box<dyn Error + Send + Sync>> {
-			Ok(Symbols {
-				symbols: vec![
-					"BTC".into(),
-					"ETH".into(),
-					"ADA".into(),
-					"XRP".into(),
-					"DOGE".into(),
-				],
-			})
+		async fn get_quotable_assets(
+			&self,
+		) -> Result<Vec<QuotedAsset>, Box<dyn Error + Send + Sync>> {
+			Ok(vec![
+				QuotedAsset {
+					asset: Asset {
+						symbol: "BTC".into(),
+						name: "Bitcoin".into(),
+						address: "0x0000000000000000000000000000000000000000".into(),
+						decimals: 8,
+						blockchain: "Bitcoin".into(),
+					},
+					volume: Decimal::new(3818975389095178, 6),
+				},
+				QuotedAsset {
+					asset: Asset {
+						symbol: "ETH".into(),
+						name: "Ether".into(),
+						address: "0x0000000000000000000000000000000000000000".into(),
+						decimals: 18,
+						blockchain: "Ethereum".into(),
+					},
+					volume: Decimal::new(791232743889491, 6),
+				},
+				QuotedAsset {
+					asset: Asset {
+						symbol: "USDT".into(),
+						name: "Tether USD".into(),
+						address: "0xdAC17F958D2ee523a2206206994597C13D831ec7".into(),
+						decimals: 6,
+						blockchain: "Ethereum".into(),
+					},
+					volume: Decimal::new(294107237463418, 6),
+				},
+				QuotedAsset {
+					asset: Asset {
+						symbol: "USDC".into(),
+						name: "USD Coin".into(),
+						address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".into(),
+						decimals: 6,
+						blockchain: "Ethereum".into(),
+					},
+					volume: Decimal::new(205584209531937, 6),
+				},
+			])
 		}
 	}
 	#[tokio::test]

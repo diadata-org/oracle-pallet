@@ -12,6 +12,7 @@ pub struct DiaApiArgs {
 	pub request_timeout_in_milliseconds: u64,
 
 	/// Currencies to support
+	/// Each currency needs to have the format <blockchain>:<symbol>
 	#[structopt(short, long, default_value = "Vec::default()")]
 	pub supported_currencies: Option<Vec<String>>,
 }

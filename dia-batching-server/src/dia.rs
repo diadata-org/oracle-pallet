@@ -4,49 +4,73 @@ use rust_decimal::Decimal;
 use serde::Deserialize;
 use std::error;
 
-const SYMBOLS_ENDPOINT: &str = "https://api.diadata.org/v1/symbols";
-/// ### Symbols
+const QUOTABLE_ASSETS_ENDPOINT: &str = "https://api.diadata.org/v1/quotedAssets";
+/// ### Quotable Assets
 ///
-/// `GET : https://api.diadata.org/v1/symbols`
+/// `GET : https://api.diadata.org/v1/quotedAssets`
 ///
-/// Get most recent information on the currency corresponding to symbol.
+/// Get most recent information on the blockchain/symbol names for assets.
 ///
 /// Example:
-/// https://api.diadata.org/v1/symbols
+/// https://api.diadata.org/v1/quotedAssets
 ///
 /// Response:
 /// ```ignore
-/// {
-/// 	"Symbols":["BTC",...]
-/// }
+/// [{
+/// 	"Asset": {
+/// 		"Symbol": "BTC",
+/// 		"Name": "Bitcoin",
+/// 		"Address": "0x0000000000000000000000000000000000000000",
+/// 		"Decimals": 8,
+/// 		"Blockchain": "Bitcoin"
+/// 	},
+/// 	"Volume": 3818975389.095178
+/// }, ...]
 /// ```
 #[derive(Deserialize, Debug, Clone)]
-pub struct Symbols {
-	#[serde(rename(deserialize = "Symbols"))]
-	pub symbols: Vec<String>,
+pub struct QuotedAsset {
+	#[serde(rename(deserialize = "Asset"))]
+	pub asset: Asset,
+	#[serde(rename(deserialize = "Volume"))]
+	pub volume: Decimal,
 }
 
-const QUOTATION_ENDPOINT: &str = "https://api.diadata.org/v1/quotation";
+#[derive(Deserialize, Debug, Clone)]
+pub struct Asset {
+	#[serde(rename(deserialize = "Symbol"))]
+	pub symbol: String,
+	#[serde(rename(deserialize = "Name"))]
+	pub name: String,
+	#[serde(rename(deserialize = "Address"))]
+	pub address: String,
+	#[serde(rename(deserialize = "Decimals"))]
+	pub decimals: u8,
+	#[serde(rename(deserialize = "Blockchain"))]
+	pub blockchain: String,
+}
+
+const QUOTATION_ENDPOINT: &str = "https://api.diadata.org/v1/assetQuotation";
 /// ### Quotation
 ///
-/// `GET : https://api.diadata.org/v1/quotation/:symbol`
+/// `GET : https://api.diadata.org/v1/assetQuotation/:blockchain/:address`
 ///
-/// Get most recent information on the currency corresponding to symbol.
+/// Get most recent information on the currency corresponding to a blockchain/address pair
 ///
 /// Example:
-/// https://api.diadata.org/v1/quotation/BTC
+/// https://api.diadata.org/v1/assetQuotation/Bitcoin/0x0000000000000000000000000000000000000000
 ///
 /// Response:
 /// ```ignore
 /// {
-///		"Symbol":"BTC",
-///		"Name":"Bitcoin",
-///		"Price":9777.19339776667,
-///		"PriceYesterday":9574.416265039981,
-///		"VolumeYesterdayUSD":298134760.8811487,
-///		"Source":"diadata.org",
-///		"Time":"2020-05-19T08:41:12.499645584Z",
-///		"ITIN":"DXVPYDQC3"
+/// 	"Symbol": "BTC",
+/// 	"Name": "Bitcoin",
+/// 	"Address": "0x0000000000000000000000000000000000000000",
+/// 	"Blockchain": "Bitcoin",
+/// 	"Price": 16826.489316709616,
+/// 	"PriceYesterday": 16813.219221169464,
+/// 	"VolumeYesterdayUSD": 3680339928.151318,
+/// 	"Time": "2022-12-24T13:33:59.982Z",
+/// 	"Source": "diadata.org"
 /// }
 /// ```
 #[derive(Deserialize, Debug, Clone)]
@@ -55,6 +79,10 @@ pub struct Quotation {
 	pub symbol: String,
 	#[serde(rename(deserialize = "Name"))]
 	pub name: String,
+	#[serde(rename(deserialize = "Address"))]
+	pub address: String,
+	#[serde(rename(deserialize = "Blockchain"))]
+	pub blockchain: String,
 	#[serde(rename(deserialize = "Price"))]
 	pub price: Decimal,
 	#[serde(rename(deserialize = "PriceYesterday"))]
@@ -63,27 +91,34 @@ pub struct Quotation {
 	pub volume_yesterday: Decimal,
 	#[serde(rename(deserialize = "Time"))]
 	pub time: DateTime<Utc>,
+	#[serde(rename(deserialize = "Source"))]
+	pub source: String,
 }
 
 impl Default for Quotation {
 	fn default() -> Self {
 		Self {
-			time: Utc::now(),
 			symbol: Default::default(),
 			name: Default::default(),
+			address: Default::default(),
+			blockchain: Default::default(),
 			price: Default::default(),
 			price_yesterday: Default::default(),
 			volume_yesterday: Default::default(),
+			time: Utc::now(),
+			source: Default::default(),
 		}
 	}
 }
 
 #[async_trait]
 pub trait DiaApi {
-	async fn get_symbols(&self) -> Result<Symbols, Box<dyn error::Error + Send + Sync>>;
+	async fn get_quotable_assets(
+		&self,
+	) -> Result<Vec<QuotedAsset>, Box<dyn error::Error + Send + Sync>>;
 	async fn get_quotation(
 		&self,
-		_: &str,
+		_: &QuotedAsset,
 	) -> Result<Quotation, Box<dyn error::Error + Sync + Send>>;
 }
 pub struct Dia;
@@ -92,16 +127,20 @@ pub struct Dia;
 impl DiaApi for Dia {
 	async fn get_quotation(
 		&self,
-		symbol: &str,
+		asset: &QuotedAsset,
 	) -> Result<Quotation, Box<dyn error::Error + Send + Sync>> {
-		let r = reqwest::get(&format!("{}/{}", QUOTATION_ENDPOINT, symbol)).await?;
+		let QuotedAsset { asset, volume: _ } = asset;
+		let r =
+			reqwest::get(&format!("{}/{}/{}", QUOTATION_ENDPOINT, asset.blockchain, asset.address))
+				.await?;
 		let q: Quotation = r.json().await?;
 		Ok(q)
 	}
 
-	async fn get_symbols(&self) -> Result<Symbols, Box<dyn error::Error + Sync + Send>> {
-		let r = reqwest::get(SYMBOLS_ENDPOINT).await?;
-		let s: Vec<String> = r.json().await?;
-		Ok(Symbols { symbols: s })
+	async fn get_quotable_assets(
+		&self,
+	) -> Result<Vec<QuotedAsset>, Box<dyn error::Error + Sync + Send>> {
+		let r = reqwest::get(QUOTABLE_ASSETS_ENDPOINT).await?;
+		Ok(r.json().await?)
 	}
 }
