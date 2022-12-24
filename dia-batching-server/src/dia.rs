@@ -101,7 +101,7 @@ impl DiaApi for Dia {
 
 	async fn get_symbols(&self) -> Result<Symbols, Box<dyn error::Error + Sync + Send>> {
 		let r = reqwest::get(SYMBOLS_ENDPOINT).await?;
-		let s: Symbols = r.json().await?;
-		Ok(s)
+		let s: Vec<String> = r.json().await?;
+		Ok(Symbols { symbols: s })
 	}
 }
