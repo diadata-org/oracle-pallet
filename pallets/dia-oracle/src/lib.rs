@@ -261,12 +261,17 @@ pub mod pallet {
 
 			let signer = Signer::<T, T::AuthorityId>::any_account();
 
+			log::error!("Signers, {:?}", signer.can_sign());
+
 			signer
-				.send_signed_transaction(|_| Call::<T>::set_updated_coin_infos {
-					// `prices` are not `move`d because of Fn(_)
-					// `prices` would have `move`d if FnOnce(_) was in signature
-					// Hence the redundant clone.
-					coin_infos: prices.clone(),
+				.send_signed_transaction(|account| {
+					log::error!("Account, {:?}, {:?}", account.id, account.public);
+					Call::<T>::set_updated_coin_infos {
+						// `prices` are not `move`d because of Fn(_)
+						// `prices` would have `move`d if FnOnce(_) was in signature
+						// Hence the redundant clone.
+						coin_infos: prices.clone(),
+					}
 				})
 				.ok_or(<Error<T>>::FailedSignedTransaction)?
 				.1
