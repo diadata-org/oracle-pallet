@@ -8,6 +8,7 @@ pub async fn currencies_post(
 	web::Json(currencies): web::Json<Vec<Currency>>,
 	storage: web::Data<CoinInfoStorage>,
 ) -> Json<Vec<CoinInfo>> {
+	println!("Request currencies {:?}", currencies);
 	Json(storage.get_ref().get_currencies_by_blockchains_and_symbols(currencies))
 }
 

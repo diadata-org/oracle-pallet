@@ -242,14 +242,15 @@ pub mod pallet {
 			}
 
 			let supported_currencies: Vec<_> =
-				[&b"{"[..], &supported_currencies[..], &b"}"[..]].concat();
+				[&b"["[..], &supported_currencies[..], &b"]"[..]].concat();
 
 			let api = Self::batching_api()
 				.ok_or(<Error<T>>::NoBatchingApiEndPoint) // Error Redundant but Explains Error Reason
 				.unwrap_or(BATCHING_ENDPOINT_FALLBACK.to_vec());
 
 			let api = sp_std::str::from_utf8(&api).map_err(|_| <Error<T>>::DeserializeStrError)?;
-			let request = offchain::http::Request::post(api, vec![supported_currencies]);
+			let request = offchain::http::Request::post(api, vec![supported_currencies])
+				.add_header("content-type", "application/json");
 
 			let pending = request.send().map_err(|_| <Error<T>>::HttpRequestSendFailed)?;
 			let response = pending.wait().map_err(|_| <Error<T>>::HttpRequestFailed)?;
@@ -265,11 +266,11 @@ pub mod pallet {
 
 			let signer = Signer::<T, T::AuthorityId>::any_account();
 
-			log::error!("Signers, {:?}", signer.can_sign());
+			log::info!("Signers, {:?}", signer.can_sign());
 
 			signer
 				.send_signed_transaction(|account| {
-					log::error!("Account, {:?}, {:?}", account.id, account.public);
+					log::info!("Account, {:?}, {:?}", account.id, account.public);
 					Call::<T>::set_updated_coin_infos {
 						// `prices` are not `move`d because of Fn(_)
 						// `prices` would have `move`d if FnOnce(_) was in signature
