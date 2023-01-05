@@ -35,7 +35,7 @@ where
 }
 
 fn convert_to_coin_info(value: Quotation) -> Result<CoinInfo, Box<dyn Error + Sync + Send>> {
-	let Quotation { name, symbol, price, time, volume_yesterday, .. } = value;
+	let Quotation { name, symbol, blockchain, price, time, volume_yesterday, .. } = value;
 
 	let price = convert_decimal_to_u128(&price)?;
 	let supply = convert_decimal_to_u128(&volume_yesterday)?;
@@ -43,6 +43,7 @@ fn convert_to_coin_info(value: Quotation) -> Result<CoinInfo, Box<dyn Error + Sy
 	let coin_info = CoinInfo {
 		name: name.into(),
 		symbol: symbol.into(),
+		blockchain: blockchain.into(),
 		price,
 		last_update_timestamp: time.timestamp().unsigned_abs(),
 		supply,
@@ -122,7 +123,10 @@ fn convert_decimal_to_u128(input: &Decimal) -> Result<u128, ConvertingError> {
 
 #[cfg(test)]
 mod tests {
-	use crate::dia::{Asset, QuotedAsset};
+	use crate::{
+		dia::{Asset, QuotedAsset},
+		handlers::Currency,
+	};
 	use std::{collections::HashMap, error::Error, sync::Arc};
 
 	use async_trait::async_trait;
@@ -146,7 +150,7 @@ mod tests {
 					price_yesterday: dec!(1.000000000000),
 					symbol: "BTC".into(),
 					time: Utc::now(),
-					volume_yesterday: dec!(1.000000000000),
+					volume_yesterday: dec!(0.123456789012345),
 					address: "0x0000000000000000000000000000000000000000".into(),
 					blockchain: "Bitcoin".into(),
 					source: "diadata.org".into(),
@@ -155,42 +159,42 @@ mod tests {
 			quotation.insert(
 				AssetSpecifier { blockchain: "Ethereum".into(), symbol: "ETH".into() },
 				Quotation {
-					name: "BTC".into(),
+					name: "ETH".into(),
 					price: dec!(1.000000000000),
 					price_yesterday: dec!(1.000000000000),
-					symbol: "BTC".into(),
+					symbol: "ETH".into(),
 					time: Utc::now(),
-					volume_yesterday: dec!(1.000000000000),
+					volume_yesterday: dec!(298134760),
 					address: "0x0000000000000000000000000000000000000000".into(),
-					blockchain: "Bitcoin".into(),
+					blockchain: "Ethereum".into(),
 					source: "diadata.org".into(),
 				},
 			);
 			quotation.insert(
-				AssetSpecifier { blockchain: "Ethereum".into(), symbol: "USTD".into() },
+				AssetSpecifier { blockchain: "Ethereum".into(), symbol: "USDT".into() },
 				Quotation {
-					name: "BTC".into(),
-					price: dec!(1.000000000000),
+					name: "USDT".into(),
+					price: dec!(1.000000000001),
 					price_yesterday: dec!(1.000000000000),
-					symbol: "BTC".into(),
+					symbol: "USDT".into(),
 					time: Utc::now(),
-					volume_yesterday: dec!(1.000000000000),
+					volume_yesterday: dec!(0.000000000001),
 					address: "0x0000000000000000000000000000000000000000".into(),
-					blockchain: "Bitcoin".into(),
+					blockchain: "Ethereum".into(),
 					source: "diadata.org".into(),
 				},
 			);
 			quotation.insert(
 				AssetSpecifier { blockchain: "Ethereum".into(), symbol: "USDC".into() },
 				Quotation {
-					name: "BTC".into(),
-					price: dec!(1.000000000000),
+					name: "USDC".into(),
+					price: dec!(123456789.123456789012345),
 					price_yesterday: dec!(1.000000000000),
-					symbol: "BTC".into(),
+					symbol: "USDC".into(),
 					time: Utc::now(),
-					volume_yesterday: dec!(1.000000000000),
+					volume_yesterday: dec!(298134760),
 					address: "0x0000000000000000000000000000000000000000".into(),
-					blockchain: "Bitcoin".into(),
+					blockchain: "Ethereum".into(),
 					source: "diadata.org".into(),
 				},
 			);
@@ -267,7 +271,12 @@ mod tests {
 		let all_currencies = None;
 		update_prices(coins, &all_currencies, &mock_api, std::time::Duration::from_secs(1)).await;
 
-		let c = storage.get_currencies_by_symbols(&["BTC", "ETH", "ADA", "XRP"]);
+		let c = storage.get_currencies_by_blockchains_and_symbols(vec![
+			Currency { blockchain: "Bitcoin".into(), symbol: "BTC".into() },
+			Currency { blockchain: "Ethereum".into(), symbol: "ETH".into() },
+			Currency { blockchain: "Ethereum".into(), symbol: "USDT".into() },
+			Currency { blockchain: "Ethereum".into(), symbol: "USDC".into() },
+		]);
 
 		assert_eq!(4, c.len());
 
@@ -284,7 +293,10 @@ mod tests {
 		let all_currencies = None;
 		update_prices(coins, &all_currencies, &mock_api, std::time::Duration::from_secs(1)).await;
 
-		let c = storage.get_currencies_by_symbols(&["BTCCash", "ETHCase"]);
+		let c = storage.get_currencies_by_blockchains_and_symbols(vec![
+			Currency { blockchain: "Bitcoin".into(), symbol: "BTCCash".into() },
+			Currency { blockchain: "Ethereum".into(), symbol: "ETHCase".into() },
+		]);
 
 		assert_eq!(0, c.len());
 	}
@@ -297,7 +309,10 @@ mod tests {
 		let all_currencies = None;
 		update_prices(coins, &all_currencies, &mock_api, std::time::Duration::from_secs(1)).await;
 
-		let c = storage.get_currencies_by_symbols(&["BTC", "ETHCase"]);
+		let c = storage.get_currencies_by_blockchains_and_symbols(vec![
+			Currency { blockchain: "Bitcoin".into(), symbol: "BTC".into() },
+			Currency { blockchain: "Ethereum".into(), symbol: "ETHCase".into() },
+		]);
 
 		assert_eq!(1, c.len());
 
@@ -314,7 +329,7 @@ mod tests {
 		let all_currencies = None;
 		update_prices(coins, &all_currencies, &mock_api, std::time::Duration::from_secs(1)).await;
 
-		let c = storage.get_currencies_by_symbols::<&str>(&[]);
+		let c = storage.get_currencies_by_blockchains_and_symbols(vec![]);
 
 		assert_eq!(0, c.len());
 	}
@@ -328,7 +343,10 @@ mod tests {
 
 		update_prices(coins, &all_currencies, &mock_api, std::time::Duration::from_secs(1)).await;
 
-		let c = storage.get_currencies_by_symbols(&["123"]);
+		let c = storage.get_currencies_by_blockchains_and_symbols(vec![Currency {
+			blockchain: "Bitcoin".into(),
+			symbol: "123".into(),
+		}]);
 
 		assert_eq!(0, c.len());
 	}
@@ -342,9 +360,13 @@ mod tests {
 
 		update_prices(coins, &all_currencies, &mock_api, std::time::Duration::from_secs(1)).await;
 
-		let c = storage.get_currencies_by_symbols(&["ADA", "XRP", "DOGE"]);
+		let c = storage.get_currencies_by_blockchains_and_symbols(vec![
+			Currency { blockchain: "Bitcoin".into(), symbol: "BTC".into() },
+			Currency { blockchain: "Ethereum".into(), symbol: "USDC".into() },
+			Currency { blockchain: "Ethereum".into(), symbol: "USDT".into() },
+		]);
 
-		assert_eq!(c[0].price, 0);
+		assert_eq!(c[0].price, 1000000000000);
 		assert_eq!(c[0].supply, 123456789012);
 
 		assert_eq!(c[1].price, 123456789123456789012);
@@ -353,8 +375,8 @@ mod tests {
 		assert_eq!(c[2].price, 1000000000001);
 		assert_eq!(c[2].supply, 1);
 
-		assert_eq!(c[0].name, "ADA");
-		assert_eq!(c[1].name, "XRP");
-		assert_eq!(c[2].name, "DOGE");
+		assert_eq!(c[0].name, "BTC");
+		assert_eq!(c[1].name, "USDC");
+		assert_eq!(c[2].name, "USDT");
 	}
 }

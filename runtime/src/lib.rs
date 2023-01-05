@@ -6,6 +6,7 @@
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
+pub use dia_oracle::AssetId;
 use dia_oracle::DiaOracle;
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
@@ -528,12 +529,12 @@ impl_runtime_apis! {
 	}
 
 		impl dia_oracle_runtime_api::DiaOracleApi<Block> for Runtime{
-			fn get_value(name: frame_support::sp_std::vec::Vec<u8>)-> Result<dia_oracle_runtime_api::PriceInfo, sp_runtime::DispatchError>{
-				DiaOracleModule::get_value(name)
+			fn get_value(blockchain: frame_support::sp_std::vec::Vec<u8>, symbol: frame_support::sp_std::vec::Vec<u8>)-> Result<dia_oracle_runtime_api::PriceInfo, sp_runtime::DispatchError>{
+				DiaOracleModule::get_value(blockchain, symbol)
 			}
 
-			fn get_coin_info(name:frame_support::sp_std::vec::Vec<u8>)-> Result<dia_oracle_runtime_api::CoinInfo,sp_runtime::DispatchError>{
-				DiaOracleModule::get_coin_info(name)
+			fn get_coin_info(blockchain: frame_support::sp_std::vec::Vec<u8>, symbol: frame_support::sp_std::vec::Vec<u8>)-> Result<dia_oracle_runtime_api::CoinInfo,sp_runtime::DispatchError>{
+				DiaOracleModule::get_coin_info(blockchain, symbol)
 			}
 		}
 

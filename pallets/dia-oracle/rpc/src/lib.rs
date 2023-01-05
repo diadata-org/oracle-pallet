@@ -16,10 +16,20 @@ use std::sync::Arc;
 #[rpc(client, server)]
 pub trait DiaOracleApi<BlockHash> {
 	#[method(name = "dia_getCoinInfo")]
-	fn get_coin_info(&self, name: Bytes, at: Option<BlockHash>) -> RpcResult<CoinInfo>;
+	fn get_coin_info(
+		&self,
+		blockchain: Bytes,
+		symbol: Bytes,
+		at: Option<BlockHash>,
+	) -> RpcResult<CoinInfo>;
 
 	#[method(name = "dia_getValue")]
-	fn get_value(&self, name: Bytes, at: Option<BlockHash>) -> RpcResult<PriceInfo>;
+	fn get_value(
+		&self,
+		blockchain: Bytes,
+		symbol: Bytes,
+		at: Option<BlockHash>,
+	) -> RpcResult<PriceInfo>;
 }
 
 /// A struct that implements the [`DiaOracleApi`].
@@ -60,7 +70,8 @@ where
 {
 	fn get_coin_info(
 		&self,
-		name: Bytes,
+		blockchain: Bytes,
+		symbol: Bytes,
 		at: Option<<Block as BlockT>::Hash>,
 	) -> RpcResult<CoinInfo> {
 		let api = self.client.runtime_api();
@@ -69,7 +80,7 @@ where
 			self.client.info().best_hash));
 
 		let r = api
-			.get_coin_info(&at, name.to_vec())
+			.get_coin_info(&at, blockchain.to_vec(), symbol.to_vec())
 			.map_err(|e| {
 				CallError::Custom(ErrorObject::owned(
 					Error::RuntimeError.into(),
@@ -88,14 +99,19 @@ where
 		Ok(r)
 	}
 
-	fn get_value(&self, name: Bytes, at: Option<<Block as BlockT>::Hash>) -> RpcResult<PriceInfo> {
+	fn get_value(
+		&self,
+		blockchain: Bytes,
+		symbol: Bytes,
+		at: Option<<Block as BlockT>::Hash>,
+	) -> RpcResult<PriceInfo> {
 		let api = self.client.runtime_api();
 		let at = BlockId::hash(at.unwrap_or_else(||
 			// If the block hash is not supplied assume the best block.
 			self.client.info().best_hash));
 
 		let r = api
-			.get_value(&at, name.to_vec())
+			.get_value(&at, blockchain.to_vec(), symbol.to_vec())
 			.map_err(|e| {
 				CallError::Custom(ErrorObject::owned(
 					Error::RuntimeError.into(),

@@ -1,5 +1,5 @@
 use crate::dia::Dia;
-use crate::handlers::{currencies_get, currencies_post};
+use crate::handlers::currencies_post;
 use crate::storage::CoinInfoStorage;
 use std::error::Error;
 
@@ -48,16 +48,11 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 	)
 	.await?;
 
-	HttpServer::new(move || {
-		App::new()
-			.app_data(data.clone())
-			.service(currencies_get)
-			.service(currencies_post)
-	})
-	.on_connect(|_, _| println!("Serving Request"))
-	.bind("0.0.0.0:8070")?
-	.run()
-	.await?;
+	HttpServer::new(move || App::new().app_data(data.clone()).service(currencies_post))
+		.on_connect(|_, _| println!("Serving Request"))
+		.bind("0.0.0.0:8070")?
+		.run()
+		.await?;
 
 	Ok(())
 }

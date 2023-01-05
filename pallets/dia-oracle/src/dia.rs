@@ -8,10 +8,10 @@ use serde::Serializer;
 // TODO: Maybe it should be moved to it's own crate
 pub trait DiaOracle {
 	/// Returns the coin info by given name
-	fn get_coin_info(name: Vec<u8>) -> Result<CoinInfo, DispatchError>;
+	fn get_coin_info(blockchain: Vec<u8>, symbol: Vec<u8>) -> Result<CoinInfo, DispatchError>;
 
 	/// Returns the price by given name
-	fn get_value(name: Vec<u8>) -> Result<PriceInfo, DispatchError>;
+	fn get_value(blockchain: Vec<u8>, symbol: Vec<u8>) -> Result<PriceInfo, DispatchError>;
 }
 
 #[derive(
@@ -32,6 +32,8 @@ pub struct CoinInfo {
 	pub symbol: Vec<u8>,
 	#[serde(deserialize_with = "de_string_to_bytes")]
 	pub name: Vec<u8>,
+	#[serde(deserialize_with = "de_string_to_bytes")]
+	pub blockchain: Vec<u8>,
 	pub supply: u128,
 	pub last_update_timestamp: u64,
 	pub price: u128,
@@ -43,6 +45,18 @@ where
 {
 	let s: &str = Deserialize::deserialize(de)?;
 	Ok(s.as_bytes().to_vec())
+}
+
+#[derive(Encode, Decode, scale_info::TypeInfo, Debug, Deserialize, Serialize)]
+pub struct AssetId {
+	pub blockchain: Vec<u8>,
+	pub symbol: Vec<u8>,
+}
+
+impl AssetId {
+	pub fn new(blockchain: Vec<u8>, symbol: Vec<u8>) -> Self {
+		AssetId { blockchain, symbol }
+	}
 }
 
 #[derive(Eq, PartialEq, Encode, Decode, Default)]
