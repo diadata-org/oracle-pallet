@@ -14,6 +14,7 @@ pub(crate) mod mock;
 pub mod dia;
 pub use dia::*;
 pub mod weights;
+pub use sp_std::convert::TryInto;
 pub use weights::WeightInfo;
 
 /// Based on the above `KeyTypeId` we need to generate a pallet-specific crypto type wrappers.
@@ -28,6 +29,8 @@ pub mod crypto {
 		MultiSignature, MultiSigner,
 	};
 	use sp_core::sr25519::Signature as Sr25519Signature;
+	use sp_std::convert::TryFrom;
+
 	app_crypto!(sr25519, KEY_TYPE);
 
 	pub struct DiaAuthId;
@@ -71,10 +74,10 @@ pub mod pallet {
 	#[pallet::config]
 	pub trait Config: frame_system::Config + CreateSignedTransaction<Call<Self>> {
 		/// The overarching event type.
-		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
+		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
 		/// The overarching dispatch call type.
-		type Call: From<Call<Self>>;
+		type RuntimeCall: From<Call<Self>>;
 
 		/// The identifier type for an offchain worker.
 		type AuthorityId: AppCrypto<Self::Public, Self::Signature>;
@@ -85,6 +88,7 @@ pub mod pallet {
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
+	#[pallet::without_storage_info]
 	pub struct Pallet<T>(_);
 
 	/// List of all authorized accounts
@@ -95,7 +99,7 @@ pub mod pallet {
 	/// List of all supported currencies
 	#[pallet::storage]
 	#[pallet::getter(fn supported_currencies)]
-	pub type SupportedCurrencies<T: Config> = StorageMap<_, Blake2_128Concat, Vec<u8>, ()>;
+	pub type SupportedCurrencies<T: Config> = StorageMap<_, Blake2_128Concat, AssetId, ()>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn batching_api)]
@@ -104,21 +108,21 @@ pub mod pallet {
 	/// Map of all the coins names to their respective info and price
 	#[pallet::storage]
 	#[pallet::getter(fn prices_map)]
-	pub type CoinInfosMap<T> = StorageMap<_, Blake2_128Concat, Vec<u8>, CoinInfo, ValueQuery>;
+	pub type CoinInfosMap<T> = StorageMap<_, Blake2_128Concat, AssetId, CoinInfo, ValueQuery>;
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
 		/// Event is triggered when prices are updated
-		UpdatedPrices(Vec<(Vec<u8>, CoinInfo)>),
+		UpdatedPrices(Vec<((Vec<u8>, Vec<u8>), CoinInfo)>),
 		/// Event is triggered when account is authorized
 		AccountIdAuthorized(T::AccountId),
 		/// Event is triggered when account is deauthorized
 		AccountIdDeauthorized(T::AccountId),
 		/// Event is triggered when currency is added to the list
-		CurrencyAdded(Vec<u8>),
+		CurrencyAdded(Vec<u8>, Vec<u8>),
 		/// Event is triggered when currency is remove from the list
-		CurrencyRemoved(Vec<u8>),
+		CurrencyRemoved(Vec<u8>, Vec<u8>),
 		/// Event is triggered when batching api route is set from the list
 		BatchingApiRouteSet(Vec<u8>),
 	}
@@ -160,7 +164,7 @@ pub mod pallet {
 	#[pallet::genesis_config]
 	pub struct GenesisConfig<T: Config> {
 		pub authorized_accounts: Vec<T::AccountId>,
-		pub supported_currencies: Vec<Vec<u8>>,
+		pub supported_currencies: Vec<AssetId>,
 		pub batching_api: Vec<u8>,
 		pub coin_infos_map: Vec<(Vec<u8>, CoinInfo)>,
 	}
@@ -168,8 +172,8 @@ pub mod pallet {
 	#[pallet::genesis_build]
 	impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
 		fn build(&self) {
-			for currency in &self.supported_currencies {
-				<SupportedCurrencies<T>>::insert(currency.clone(), ());
+			for asset_id in &self.supported_currencies {
+				<SupportedCurrencies<T>>::insert(asset_id.clone(), ());
 			}
 
 			for account_id in &self.authorized_accounts {
@@ -202,14 +206,16 @@ pub mod pallet {
 	}
 
 	impl<T: Config> DiaOracle for Pallet<T> {
-		fn get_coin_info(name: Vec<u8>) -> Result<CoinInfo, DispatchError> {
-			ensure!(<CoinInfosMap<T>>::contains_key(&name), Error::<T>::NoCoinInfoAvailable);
-			let result = <CoinInfosMap<T>>::get(name);
+		fn get_coin_info(blockchain: Vec<u8>, symbol: Vec<u8>) -> Result<CoinInfo, DispatchError> {
+			let asset_id = AssetId { blockchain, symbol };
+			ensure!(<CoinInfosMap<T>>::contains_key(&asset_id), Error::<T>::NoCoinInfoAvailable);
+			let result = <CoinInfosMap<T>>::get(&asset_id);
 			Ok(result)
 		}
 
-		fn get_value(name: Vec<u8>) -> Result<PriceInfo, DispatchError> {
-			<Pallet<T> as DiaOracle>::get_coin_info(name).map(|info| PriceInfo { value: info.price })
+		fn get_value(blockchain: Vec<u8>, symbol: Vec<u8>) -> Result<PriceInfo, DispatchError> {
+			<Pallet<T> as DiaOracle>::get_coin_info(blockchain, symbol)
+				.map(|info| PriceInfo { value: info.price })
 		}
 	}
 
@@ -217,32 +223,34 @@ pub mod pallet {
 		fn update_prices() -> Result<(), Error<T>> {
 			// Expected contract for the API with the server is supported currencies in URL path and
 			// json encoded Vec<CoinInfo> as a result from the server
-			let supported_currencies: Vec<u8> = <SupportedCurrencies<T>>::iter_keys()
-				.map(|mut c| {
-					c.extend(b",");
-					c
+			let supported_currencies = <SupportedCurrencies<T>>::iter_keys()
+				.map(|AssetId { blockchain, symbol }| {
+					[
+						&b"{\"blockchain\":\""[..],
+						&blockchain[..],
+						&b"\",\"symbol\":\""[..],
+						&symbol[..],
+						&b"\"}"[..],
+					]
+					.concat()
 				})
-				.flatten()
-				.collect::<Vec<u8>>();
+				.collect::<Vec<_>>()
+				.join(&b',');
 
 			if supported_currencies.len() == 0 {
-				return Ok(())
+				return Ok(());
 			}
 
-			let mut api = Self::batching_api()
+			let supported_currencies: Vec<_> =
+				[&b"["[..], &supported_currencies[..], &b"]"[..]].concat();
+
+			let api = Self::batching_api()
 				.ok_or(<Error<T>>::NoBatchingApiEndPoint) // Error Redundant but Explains Error Reason
 				.unwrap_or(BATCHING_ENDPOINT_FALLBACK.to_vec());
 
-			let request = if supported_currencies.len() < (u16::MAX as usize) {
-				api.extend(supported_currencies);
-				let api =
-					sp_std::str::from_utf8(&api).map_err(|_| <Error<T>>::DeserializeStrError)?;
-				offchain::http::Request::get(api)
-			} else {
-				let api =
-					sp_std::str::from_utf8(&api).map_err(|_| <Error<T>>::DeserializeStrError)?;
-				offchain::http::Request::post(api, vec![&supported_currencies[..]])
-			};
+			let api = sp_std::str::from_utf8(&api).map_err(|_| <Error<T>>::DeserializeStrError)?;
+			let request = offchain::http::Request::post(api, vec![supported_currencies])
+				.add_header("content-type", "application/json");
 
 			let pending = request.send().map_err(|_| <Error<T>>::HttpRequestSendFailed)?;
 			let response = pending.wait().map_err(|_| <Error<T>>::HttpRequestFailed)?;
@@ -251,17 +259,24 @@ pub mod pallet {
 			let prices: Vec<CoinInfo> =
 				serde_json::from_slice(&body).map_err(|_| <Error<T>>::DeserializeError)?;
 
-			let prices: Vec<(Vec<u8>, CoinInfo)> =
-				prices.into_iter().map(|p| (p.name.clone(), p)).collect();
+			let prices: Vec<((Vec<u8>, Vec<u8>), CoinInfo)> = prices
+				.into_iter()
+				.map(|p| ((p.blockchain.clone(), p.symbol.clone()), p))
+				.collect();
 
 			let signer = Signer::<T, T::AuthorityId>::any_account();
 
+			log::info!("Signers, {:?}", signer.can_sign());
+
 			signer
-				.send_signed_transaction(|_| Call::<T>::set_updated_coin_infos {
-					// `prices` are not `move`d because of Fn(_)
-					// `prices` would have `move`d if FnOnce(_) was in signature
-					// Hence the redundant clone.
-					coin_infos: prices.clone(),
+				.send_signed_transaction(|account| {
+					log::info!("Account, {:?}, {:?}", account.id, account.public);
+					Call::<T>::set_updated_coin_infos {
+						// `prices` are not `move`d because of Fn(_)
+						// `prices` would have `move`d if FnOnce(_) was in signature
+						// Hence the redundant clone.
+						coin_infos: prices.clone(),
+					}
 				})
 				.ok_or(<Error<T>>::FailedSignedTransaction)?
 				.1
@@ -282,26 +297,36 @@ pub mod pallet {
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		#[pallet::weight(<T as Config>::WeightInfo::add_currency())]
-		pub fn add_currency(origin: OriginFor<T>, currency_symbol: Vec<u8>) -> DispatchResult {
+		pub fn add_currency(
+			origin: OriginFor<T>,
+			blockchain: Vec<u8>,
+			symbol: Vec<u8>,
+		) -> DispatchResult {
 			let origin_account_id = ensure_signed(origin)?;
 			Pallet::<T>::check_origin_rights(&origin_account_id)?;
 
-			if !<SupportedCurrencies<T>>::contains_key(&currency_symbol) {
-				Self::deposit_event(Event::<T>::CurrencyAdded(currency_symbol.clone()));
-				<SupportedCurrencies<T>>::insert(currency_symbol, ());
+			let asset_id = AssetId { blockchain: blockchain.clone(), symbol: symbol.clone() };
+			if !<SupportedCurrencies<T>>::contains_key(&asset_id) {
+				Self::deposit_event(Event::<T>::CurrencyAdded(blockchain, symbol));
+				<SupportedCurrencies<T>>::insert(asset_id, ());
 			}
 
 			Ok(())
 		}
 
 		#[pallet::weight(<T as Config>::WeightInfo::remove_currency())]
-		pub fn remove_currency(origin: OriginFor<T>, currency_symbol: Vec<u8>) -> DispatchResult {
+		pub fn remove_currency(
+			origin: OriginFor<T>,
+			blockchain: Vec<u8>,
+			symbol: Vec<u8>,
+		) -> DispatchResult {
 			let origin_account_id = ensure_signed(origin)?;
 			Pallet::<T>::check_origin_rights(&origin_account_id)?;
 
-			if <SupportedCurrencies<T>>::contains_key(&currency_symbol) {
-				Self::deposit_event(Event::<T>::CurrencyRemoved(currency_symbol.clone()));
-				<SupportedCurrencies<T>>::remove(currency_symbol);
+			let asset_id = AssetId { blockchain: blockchain.clone(), symbol: symbol.clone() };
+			if <SupportedCurrencies<T>>::contains_key(&asset_id) {
+				Self::deposit_event(Event::<T>::CurrencyRemoved(blockchain, symbol));
+				<SupportedCurrencies<T>>::remove(asset_id);
 			}
 
 			Ok(())
@@ -349,13 +374,13 @@ pub mod pallet {
 		#[pallet::weight(<T as Config>::WeightInfo::set_updated_coin_infos())]
 		pub fn set_updated_coin_infos(
 			origin: OriginFor<T>,
-			coin_infos: Vec<(Vec<u8>, CoinInfo)>,
+			coin_infos: Vec<((Vec<u8>, Vec<u8>), CoinInfo)>,
 		) -> DispatchResult {
 			let origin_account_id = ensure_signed(origin)?;
 			Pallet::<T>::check_origin_rights(&origin_account_id)?;
 			Self::deposit_event(Event::<T>::UpdatedPrices(coin_infos.clone()));
-			for (v, c) in coin_infos.into_iter().map(|(x, y)| (x, y)) {
-				<CoinInfosMap<T>>::insert(v, c);
+			for ((blockchain, symbol), c) in coin_infos {
+				<CoinInfosMap<T>>::insert(AssetId { blockchain, symbol }, c);
 			}
 			Ok(())
 		}

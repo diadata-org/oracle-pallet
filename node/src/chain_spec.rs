@@ -1,6 +1,6 @@
 use node_template_runtime::{
-	AccountId, AuraConfig, BalancesConfig, DiaOracleModuleConfig, GenesisConfig, GrandpaConfig,
-	Signature, SudoConfig, SystemConfig, WASM_BINARY,
+	AccountId, AssetId, AuraConfig, BalancesConfig, DiaOracleModuleConfig, GenesisConfig,
+	GrandpaConfig, Signature, SudoConfig, SystemConfig, WASM_BINARY,
 };
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
@@ -68,6 +68,7 @@ pub fn development_config() -> Result<ChainSpec, String> {
 		None,
 		// Protocol ID
 		None,
+		None,
 		// Properties
 		None,
 		// Extensions
@@ -117,6 +118,7 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 		None,
 		// Properties
 		None,
+		None,
 		// Extensions
 		None,
 	))
@@ -134,7 +136,6 @@ fn testnet_genesis(
 		system: SystemConfig {
 			// Add Wasm runtime to storage.
 			code: wasm_binary.to_vec(),
-			changes_trie_config: Default::default(),
 		},
 		balances: BalancesConfig {
 			// Configure endowed accounts with initial balance of 1 << 60.
@@ -148,13 +149,13 @@ fn testnet_genesis(
 		},
 		sudo: SudoConfig {
 			// Assign network admin rights.
-			key: root_key.clone(),
+			key: Some(root_key.clone()),
 		},
-
+		transaction_payment: Default::default(),
 		dia_oracle_module: DiaOracleModuleConfig {
 			authorized_accounts: vec![root_key],
-			supported_currencies: vec![b"BTC".to_vec()],
-			batching_api: b"http://localhost:8070/currencies/".to_vec(),
+			supported_currencies: vec![AssetId::new(b"Bitcoin".to_vec(), b"BTC".to_vec())],
+			batching_api: b"http://localhost:8070/currencies".to_vec(),
 			coin_infos_map: vec![],
 		},
 	}

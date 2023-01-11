@@ -12,42 +12,39 @@ targets = ['x86_64-unknown-linux-gnu']
 default-features = false
 features = ['derive']
 package = 'parity-scale-codec'
-version = '2.0.0'
+version = '3.0.0'
 
 [dependencies.frame-benchmarking]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
 optional = true
-tag = 'monthly-2021-10'
-version = '4.0.0-dev'
+branch = "polkadot-v0.9.35"
 
 [dependencies.frame-support]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
-tag = 'monthly-2021-10'
-version = '4.0.0-dev'
+branch = "polkadot-v0.9.35"
 
 [dependencies.frame-system]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
-tag = 'monthly-2021-10'
-version = '4.0.0-dev'
+branch = "polkadot-v0.9.35"
 
-[dependencies.log] 
-default-features = false 
-version = "0.4.14"
+[dependencies.log]
+default-features = false
+version = "0.4.17"
 
 [dependencies.scale-info]
 default-features = false
 features = ['derive']
-version = '1.0'
+version = '2.1.1'
 
-[dependencies.serde] 
+[dependencies.serde]
 version = '1.0.130'
 default-features = false
-features = ['derive'] 
+features = ['derive']
 
-[dependencies.serde_json] 
+[dependencies.serde_json]
 version = '1.0.67'
 default-features = false
 features = ['alloc']
@@ -55,20 +52,27 @@ features = ['alloc']
 [dependencies.sp-core]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
-tag = 'monthly-2021-10'
-version = '4.0.0-dev'
+branch = "polkadot-v0.9.35"
+
+[dependencies.sp-std]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+branch = "polkadot-v0.9.35"
+
+[dependencies.sp-runtime]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+branch = "polkadot-v0.9.35"
 
 [dev-dependencies.sp-io]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
-tag = 'monthly-2021-10'
-version = '4.0.0-dev'
+branch = "polkadot-v0.9.35"
 
 [dev-dependencies.sp-runtime]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
-tag = 'monthly-2021-10'
-version = '4.0.0-dev'
+branch = "polkadot-v0.9.35"
 
 
 [features]
@@ -80,6 +84,7 @@ std = [
     'frame-support/std',
     'frame-system/std',
     'frame-benchmarking/std',
+	'sp-runtime/std',
     'log/std'
 ]
 try-runtime = ['frame-support/try-runtime']
