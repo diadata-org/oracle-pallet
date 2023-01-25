@@ -16,20 +16,20 @@ jsonrpsee = { version = "0.16.2", features = ["client-core", "server", "macros"]
 [dependencies.sp-api]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
-branch = "polkadot-v0.9.35"
+branch = "polkadot-v0.9.37"
 
 [dependencies.sp-blockchain]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
-branch = "polkadot-v0.9.35"
+branch = "polkadot-v0.9.37"
 
 [dependencies.sp-core]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
-branch = "polkadot-v0.9.35"
+branch = "polkadot-v0.9.37"
 
 [dependencies.sp-runtime]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
-branch = "polkadot-v0.9.35"
+branch = "polkadot-v0.9.37"
 
