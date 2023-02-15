@@ -229,10 +229,10 @@ mod tests {
             quotation.insert(
                 AssetSpecifier { blockchain: "FIAT".into(), symbol: "MXN".into() },
                 Quotation {
-                    name: "MXN-X".into(),
-                    price: dec!(18.65192),
-                    price_yesterday: dec!(18.550382926829265),
-                    symbol: "USD-MXN".into(),
+                    name: "MXNUSD=X".into(),
+                    price: dec!(0.053712327),
+                    price_yesterday: dec!(0.053910317166666666),
+                    symbol: "MXN-USD".into(),
                     time: Utc::now(),
                     volume_yesterday: dec!(0),
                     address: None,
@@ -348,14 +348,14 @@ mod tests {
 
         let c = storage.get_currencies_by_blockchains_and_symbols(vec![
             Currency { blockchain: "Bitcoin".into(), symbol: "BTC".into() },
-            Currency { blockchain: "FIAT".into(), symbol: "USD-MXN".into() },
+            Currency { blockchain: "FIAT".into(), symbol: "MXN-USD".into() },
         ]);
 
         assert_eq!(2, c.len());
 
-        assert_eq!(c[1].price, 18651920000000);
+        assert_eq!(c[1].price, 53712327000);
 
-        assert_eq!(c[1].name, "MXN-X");
+        assert_eq!(c[1].name, "MXNUSD=X");
     }
 
     #[tokio::test]
