@@ -3,7 +3,6 @@ use chrono::prelude::*;
 use rust_decimal::Decimal;
 use serde::Deserialize;
 use std::error;
-use std::error::Error;
 
 const QUOTABLE_ASSETS_ENDPOINT: &str = "https://api.diadata.org/v1/quotedAssets";
 /// ### Quotable Assets
@@ -113,6 +112,22 @@ impl Default for Quotation {
 	}
 }
 
+impl Quotation {
+	pub fn get_default_fiat_usd_quotation() -> Self {
+		Self {
+			symbol: "USD-USD".to_string(),
+			name: "USD-X".to_string(),
+			address: None,
+			blockchain: None,
+			price: Decimal::new(1, 0),
+			price_yesterday: Decimal::new(1, 0),
+			volume_yesterday: Decimal::new(0, 0),
+			time: Utc::now(),
+			source: "YahooFinance".to_string(),
+		}
+	}
+}
+
 #[async_trait]
 pub trait DiaApi {
 	async fn get_quotable_assets(
@@ -132,6 +147,10 @@ impl DiaApi for Dia {
 		asset: &QuotedAsset,
 	) -> Result<Quotation, Box<dyn error::Error + Send + Sync>> {
 		let QuotedAsset { asset, volume: _ } = asset;
+
+		if asset.blockchain == "FIAT" && asset.symbol == "USD" {
+			return Ok(Quotation::get_default_fiat_usd_quotation());
+		}
 
 		let r = if asset.blockchain == "FIAT" {
 			// We assume here that our base currency will always be USD

@@ -240,6 +240,10 @@ mod tests {
                     source: "YahooFinance".into(),
                 }
             );
+            quotation.insert(
+                AssetSpecifier { blockchain: "FIAT".into(), symbol: "USD".into() },
+                Quotation::get_default_fiat_usd_quotation(),
+            );
             Self { quotation }
         }
     }
@@ -330,7 +334,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_update_prices_with_fiat() {
+    async fn test_update_prices_with_fiat_and_crypto_asset_works() {
         let mock_api = MockDia::new();
         let storage = Arc::new(CoinInfoStorage::default());
         let coins = Arc::clone(&storage);
@@ -352,6 +356,29 @@ mod tests {
         assert_eq!(c[1].price, 18651920000000);
 
         assert_eq!(c[1].name, "MXN-X");
+    }
+
+    #[tokio::test]
+    async fn test_update_prices_with_fiat_usd_works() {
+        let mock_api = MockDia::new();
+        let storage = Arc::new(CoinInfoStorage::default());
+        let coins = Arc::clone(&storage);
+
+        let mut all_currencies = HashSet::new();
+        all_currencies.insert(AssetSpecifier { blockchain: "FIAT".into(), symbol: "USD".into() });
+        let all_currencies = Some(all_currencies);
+
+        update_prices(coins, &all_currencies, &mock_api, std::time::Duration::from_secs(1)).await;
+
+        let c = storage.get_currencies_by_blockchains_and_symbols(vec![
+            Currency { blockchain: "FIAT".into(), symbol: "USD-USD".into() },
+        ]);
+
+        assert_eq!(1, c.len());
+
+        assert_eq!(c[0].price, 1000000000000);
+
+        assert_eq!(c[0].name, "USD-X");
     }
 
     #[tokio::test]
