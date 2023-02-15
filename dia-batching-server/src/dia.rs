@@ -3,6 +3,7 @@ use chrono::prelude::*;
 use rust_decimal::Decimal;
 use serde::Deserialize;
 use std::error;
+use std::error::Error;
 
 const QUOTABLE_ASSETS_ENDPOINT: &str = "https://api.diadata.org/v1/quotedAssets";
 /// ### Quotable Assets
@@ -49,6 +50,7 @@ pub struct Asset {
 	pub blockchain: String,
 }
 
+const FOREIGN_QUOTATION_ENDPOINT: &str = "https://api.diadata.org/v1/foreignQuotation/YahooFinance";
 const QUOTATION_ENDPOINT: &str = "https://api.diadata.org/v1/assetQuotation";
 /// ### Quotation
 ///
@@ -80,9 +82,9 @@ pub struct Quotation {
 	#[serde(rename(deserialize = "Name"))]
 	pub name: String,
 	#[serde(rename(deserialize = "Address"))]
-	pub address: String,
+	pub address: Option<String>,
 	#[serde(rename(deserialize = "Blockchain"))]
-	pub blockchain: String,
+	pub blockchain: Option<String>,
 	#[serde(rename(deserialize = "Price"))]
 	pub price: Decimal,
 	#[serde(rename(deserialize = "PriceYesterday"))]
@@ -130,9 +132,17 @@ impl DiaApi for Dia {
 		asset: &QuotedAsset,
 	) -> Result<Quotation, Box<dyn error::Error + Send + Sync>> {
 		let QuotedAsset { asset, volume: _ } = asset;
-		let r =
+
+		let r = if asset.blockchain == "FIAT" {
+			// We assume here that our base currency will always be USD
+			const BASE_CURRENCY: &str = "USD";
+			let fiat_quote = &format!("{}/{}", BASE_CURRENCY, asset.symbol);
+			reqwest::get(&format!("{}/{}", FOREIGN_QUOTATION_ENDPOINT, fiat_quote))
+				.await?
+		} else {
 			reqwest::get(&format!("{}/{}/{}", QUOTATION_ENDPOINT, asset.blockchain, asset.address))
-				.await?;
+				.await?
+		};
 		let q: Quotation = r.json().await?;
 		Ok(q)
 	}
