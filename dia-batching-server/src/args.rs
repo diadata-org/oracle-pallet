@@ -1,5 +1,17 @@
 use structopt::StructOpt;
 
+fn parse_currency_vec(src: &str) -> SupportedCurrencies {
+	let mut vec = Vec::new();
+	for s in src.split(',') {
+		vec.push(s.to_string());
+	}
+	SupportedCurrencies(vec)
+}
+
+// We need the extra struct to be able to parse the currencies to a Vec
+#[derive(Debug)]
+pub struct SupportedCurrencies(pub Vec<String>);
+
 #[derive(Debug, StructOpt)]
 #[structopt(name = "dia-batching-server", about = "An server for batching requests to the Dia API")]
 pub struct DiaApiArgs {
@@ -13,6 +25,6 @@ pub struct DiaApiArgs {
 
 	/// Currencies to support
 	/// Each currency needs to have the format <blockchain>:<symbol>
-	#[structopt(short, long, default_value = "Vec::default()")]
-	pub supported_currencies: Option<Vec<String>>,
+	#[structopt(short, long, parse(from_str = parse_currency_vec), default_value = "Polkadot:DOT,FIAT:MXN,FIAT:USD")]
+	pub supported_currencies: SupportedCurrencies,
 }
