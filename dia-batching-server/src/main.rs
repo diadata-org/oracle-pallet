@@ -25,15 +25,20 @@ pub struct AssetSpecifier {
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 	pretty_env_logger::init();
 
+	println!("Starting dia-batching-server...");
+
 	let args: DiaApiArgs = DiaApiArgs::from_args();
 	let storage = Arc::new(CoinInfoStorage::default());
 	let data = web::Data::from(storage.clone());
 
+	let supported_currencies_vec = Some(args.supported_currencies.0);
+
 	price_updater::run_update_prices_loop(
 		storage,
-		args.supported_currencies.filter(|x| x.len() > 0).map(|curs| {
+		supported_currencies_vec.filter(|x| x.len() > 0).map(|curs| {
 			curs.into_iter()
 				.filter_map(|asset| {
+					println!("Asset: {}", asset);
 					let (blockchain, symbol) = asset.trim().split_once(":").or_else(|| {
 						error!("Invalid asset '{}' – every asset needs to have the form <blockchain>:<symbol>", asset);
 						None
@@ -48,11 +53,13 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 	)
 	.await?;
 
+	println!("Running dia-batching-server... (Press CTRL+C to quit)");
 	HttpServer::new(move || App::new().app_data(data.clone()).service(currencies_post))
 		.on_connect(|_, _| println!("Serving Request"))
 		.bind("0.0.0.0:8070")?
 		.run()
 		.await?;
+
 
 	Ok(())
 }
