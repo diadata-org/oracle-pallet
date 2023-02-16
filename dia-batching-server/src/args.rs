@@ -25,6 +25,10 @@ pub struct DiaApiArgs {
 
 	/// Currencies to support
 	/// Each currency needs to have the format <blockchain>:<symbol>
-	#[structopt(short, long, parse(from_str = parse_currency_vec), default_value = "Polkadot:DOT,FIAT:MXN,FIAT:USD")]
+	/// Fiat currencies need to have the format FIAT:<from>-<to>
+	#[structopt(short, long,
+      parse(from_str = parse_currency_vec),
+      default_value = "Polkadot:DOT,Kusama:KSM,FIAT:MXN-USD,FIAT:USD-USD"
+    )]
 	pub supported_currencies: SupportedCurrencies,
 }

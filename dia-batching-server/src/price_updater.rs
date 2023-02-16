@@ -227,7 +227,7 @@ mod tests {
                 },
             );
             quotation.insert(
-                AssetSpecifier { blockchain: "FIAT".into(), symbol: "MXN".into() },
+                AssetSpecifier { blockchain: "FIAT".into(), symbol: "MXN-USD".into() },
                 Quotation {
                     name: "MXNUSD=X".into(),
                     price: dec!(0.053712327),
@@ -241,7 +241,7 @@ mod tests {
                 }
             );
             quotation.insert(
-                AssetSpecifier { blockchain: "FIAT".into(), symbol: "USD".into() },
+                AssetSpecifier { blockchain: "FIAT".into(), symbol: "USD-USD".into() },
                 Quotation::get_default_fiat_usd_quotation(),
             );
             Self { quotation }
@@ -341,7 +341,7 @@ mod tests {
 
         let mut all_currencies = HashSet::new();
         all_currencies.insert(AssetSpecifier { blockchain: "Bitcoin".into(), symbol: "BTC".into() });
-        all_currencies.insert(AssetSpecifier { blockchain: "FIAT".into(), symbol: "MXN".into() });
+        all_currencies.insert(AssetSpecifier { blockchain: "FIAT".into(), symbol: "MXN-USD".into() });
         let all_currencies = Some(all_currencies);
 
         update_prices(coins, &all_currencies, &mock_api, std::time::Duration::from_secs(1)).await;
@@ -365,7 +365,7 @@ mod tests {
         let coins = Arc::clone(&storage);
 
         let mut all_currencies = HashSet::new();
-        all_currencies.insert(AssetSpecifier { blockchain: "FIAT".into(), symbol: "USD".into() });
+        all_currencies.insert(AssetSpecifier { blockchain: "FIAT".into(), symbol: "USD-USD".into() });
         let all_currencies = Some(all_currencies);
 
         update_prices(coins, &all_currencies, &mock_api, std::time::Duration::from_secs(1)).await;

@@ -148,16 +148,14 @@ impl DiaApi for Dia {
 	) -> Result<Quotation, Box<dyn error::Error + Send + Sync>> {
 		let QuotedAsset { asset, volume: _ } = asset;
 
-		if asset.blockchain == "FIAT" && asset.symbol == "USD" {
+		if asset.blockchain.to_uppercase() == "FIAT" && asset.symbol.to_uppercase() == "USD-USD" {
 			return Ok(Quotation::get_default_fiat_usd_quotation());
 		}
 
-		let r = if asset.blockchain == "FIAT" {
-			// We assume here that our base currency will always be USD
-			const TARGET_CURRENCY: &str = "USD";
-			// Note that the order is important here. We want the 'fiat to USD' price
-			let fiat_quote = &format!("{}-{}", asset.symbol, TARGET_CURRENCY);
-			reqwest::get(&format!("{}/{}", FOREIGN_QUOTATION_ENDPOINT, fiat_quote))
+		let r = if asset.blockchain.to_uppercase() == "FIAT" {
+			// The fiat symbol should be of form `{base}-{target}` (e.g. "MXN-USD") for the API to work
+			let fiat_symbol = asset.symbol.to_uppercase();
+			reqwest::get(&format!("{}/{}", FOREIGN_QUOTATION_ENDPOINT, fiat_symbol))
 				.await?
 		} else {
 			reqwest::get(&format!("{}/{}/{}", QUOTATION_ENDPOINT, asset.blockchain, asset.address))
