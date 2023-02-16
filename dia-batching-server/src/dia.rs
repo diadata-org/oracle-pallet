@@ -49,7 +49,9 @@ pub struct Asset {
 	pub blockchain: String,
 }
 
+/// Find information on how to use it here: https://docs.diadata.org/documentation/api-1/traditional-finance-data-api-endpoints
 const FOREIGN_QUOTATION_ENDPOINT: &str = "https://api.diadata.org/v1/foreignQuotation/YahooFinance";
+
 const QUOTATION_ENDPOINT: &str = "https://api.diadata.org/v1/assetQuotation";
 /// ### Quotation
 ///
@@ -155,8 +157,7 @@ impl DiaApi for Dia {
 		let r = if asset.blockchain.to_uppercase() == "FIAT" {
 			// The fiat symbol should be of form `{base}-{target}` (e.g. "MXN-USD") for the API to work
 			let fiat_symbol = asset.symbol.to_uppercase();
-			reqwest::get(&format!("{}/{}", FOREIGN_QUOTATION_ENDPOINT, fiat_symbol))
-				.await?
+			reqwest::get(&format!("{}/{}", FOREIGN_QUOTATION_ENDPOINT, fiat_symbol)).await?
 		} else {
 			reqwest::get(&format!("{}/{}/{}", QUOTATION_ENDPOINT, asset.blockchain, asset.address))
 				.await?
