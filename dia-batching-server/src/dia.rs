@@ -156,7 +156,7 @@ impl DiaApi for Dia {
 			// We assume here that our base currency will always be USD
 			const TARGET_CURRENCY: &str = "USD";
 			// Note that the order is important here. We want the 'fiat to USD' price
-			let fiat_quote = &format!("{}/{}", asset.symbol, TARGET_CURRENCY);
+			let fiat_quote = &format!("{}-{}", asset.symbol, TARGET_CURRENCY);
 			reqwest::get(&format!("{}/{}", FOREIGN_QUOTATION_ENDPOINT, fiat_quote))
 				.await?
 		} else {
