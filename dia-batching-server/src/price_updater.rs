@@ -1,4 +1,4 @@
-use crate::dia::{DiaApi, Quotation};
+use crate::dia::{Asset, DiaApi, Quotation, QuotedAsset};
 use crate::storage::{CoinInfo, CoinInfoStorage};
 use crate::AssetSpecifier;
 use log::{error, info};
@@ -43,7 +43,7 @@ fn convert_to_coin_info(value: Quotation) -> Result<CoinInfo, Box<dyn Error + Sy
 	let coin_info = CoinInfo {
 		name: name.into(),
 		symbol: symbol.into(),
-		blockchain: blockchain.into(),
+		blockchain: blockchain.unwrap_or("FIAT".to_string()).into(),
 		price,
 		last_update_timestamp: time.timestamp().unsigned_abs(),
 		supply,
@@ -64,10 +64,10 @@ async fn update_prices<T>(
 ) where
 	T: DiaApi + Send + Sync + 'static,
 {
+	let mut currencies = vec![];
+
 	if let Ok(quotable_assets) = api.get_quotable_assets().await {
 		info!("No. of quotable assets to retrieve : {}", quotable_assets.len());
-
-		let mut currencies = vec![];
 
 		for quotable_asset in quotable_assets {
 			let asset = AssetSpecifier {
@@ -90,11 +90,38 @@ async fn update_prices<T>(
 				tokio::time::delay_for(rate).await;
 			}
 		}
-
-		coins.replace_currencies_by_symbols(currencies);
-		info!("Currencies Updated");
 	}
+
+	if let Some(supported_currencies) = maybe_supported_currencies.as_ref() {
+		for asset in supported_currencies.iter() {
+			if asset.blockchain == "FIAT" {
+				// Create dummy QuotedAsset. We only need it to have the symbol and blockchain
+				let quoted_asset = QuotedAsset {
+					asset: Asset {
+						symbol: asset.symbol.clone(),
+						name: "".to_string(),
+						address: "".to_string(),
+						decimals: 0,
+						blockchain: asset.blockchain.clone(),
+					},
+					volume: Default::default(),
+				};
+				match api.get_quotation(&quoted_asset).await.and_then(convert_to_coin_info) {
+					Ok(coin_info) => {
+						currencies.push(coin_info);
+					},
+					Err(err) => {
+						error!("Error while retrieving quotation for {:?}: {}", quoted_asset, err)
+					},
+				}
+			}
+		}
+	}
+
+	coins.replace_currencies_by_symbols(currencies);
+	info!("Currencies Updated");
 }
+
 #[derive(Debug)]
 pub enum ConvertingError {
 	DecimalTooLarge,
@@ -151,8 +178,8 @@ mod tests {
 					symbol: "BTC".into(),
 					time: Utc::now(),
 					volume_yesterday: dec!(0.123456789012345),
-					address: "0x0000000000000000000000000000000000000000".into(),
-					blockchain: "Bitcoin".into(),
+					address: Some("0x0000000000000000000000000000000000000000".into()),
+					blockchain: Some("Bitcoin".into()),
 					source: "diadata.org".into(),
 				},
 			);
@@ -165,8 +192,8 @@ mod tests {
 					symbol: "ETH".into(),
 					time: Utc::now(),
 					volume_yesterday: dec!(298134760),
-					address: "0x0000000000000000000000000000000000000000".into(),
-					blockchain: "Ethereum".into(),
+					address: Some("0x0000000000000000000000000000000000000000".into()),
+					blockchain: Some("Ethereum".into()),
 					source: "diadata.org".into(),
 				},
 			);
@@ -179,8 +206,8 @@ mod tests {
 					symbol: "USDT".into(),
 					time: Utc::now(),
 					volume_yesterday: dec!(0.000000000001),
-					address: "0x0000000000000000000000000000000000000000".into(),
-					blockchain: "Ethereum".into(),
+					address: Some("0x0000000000000000000000000000000000000000".into()),
+					blockchain: Some("Ethereum".into()),
 					source: "diadata.org".into(),
 				},
 			);
@@ -193,10 +220,28 @@ mod tests {
 					symbol: "USDC".into(),
 					time: Utc::now(),
 					volume_yesterday: dec!(298134760),
-					address: "0x0000000000000000000000000000000000000000".into(),
-					blockchain: "Ethereum".into(),
+					address: Some("0x0000000000000000000000000000000000000000".into()),
+					blockchain: Some("Ethereum".into()),
 					source: "diadata.org".into(),
 				},
+			);
+			quotation.insert(
+				AssetSpecifier { blockchain: "FIAT".into(), symbol: "MXN-USD".into() },
+				Quotation {
+					name: "MXNUSD=X".into(),
+					price: dec!(0.053712327),
+					price_yesterday: dec!(0.053910317166666666),
+					symbol: "MXN-USD".into(),
+					time: Utc::now(),
+					volume_yesterday: dec!(0),
+					address: None,
+					blockchain: None,
+					source: "YahooFinance".into(),
+				},
+			);
+			quotation.insert(
+				AssetSpecifier { blockchain: "FIAT".into(), symbol: "USD-USD".into() },
+				Quotation::get_default_fiat_usd_quotation(),
 			);
 			Self { quotation }
 		}
@@ -213,7 +258,9 @@ mod tests {
 				blockchain: asset.blockchain.clone(),
 				symbol: asset.symbol.clone(),
 			};
-			Ok(self.quotation.get(&asset).ok_or("Error Finding Quotation".to_string())?.clone())
+			let quotation =
+				self.quotation.get(&asset).ok_or("Error Finding Quotation".to_string())?;
+			Ok(quotation.clone())
 		}
 
 		async fn get_quotable_assets(
@@ -263,6 +310,7 @@ mod tests {
 			])
 		}
 	}
+
 	#[tokio::test]
 	async fn test_update_prices() {
 		let mock_api = MockDia::new();
@@ -283,6 +331,58 @@ mod tests {
 		assert_eq!(c[1].price, 1000000000000);
 
 		assert_eq!(c[1].name, "ETH");
+	}
+
+	#[tokio::test]
+	async fn test_update_prices_with_fiat_and_crypto_asset_works() {
+		let mock_api = MockDia::new();
+		let storage = Arc::new(CoinInfoStorage::default());
+		let coins = Arc::clone(&storage);
+
+		let mut all_currencies = HashSet::new();
+		all_currencies
+			.insert(AssetSpecifier { blockchain: "Bitcoin".into(), symbol: "BTC".into() });
+		all_currencies
+			.insert(AssetSpecifier { blockchain: "FIAT".into(), symbol: "MXN-USD".into() });
+		let all_currencies = Some(all_currencies);
+
+		update_prices(coins, &all_currencies, &mock_api, std::time::Duration::from_secs(1)).await;
+
+		let c = storage.get_currencies_by_blockchains_and_symbols(vec![
+			Currency { blockchain: "Bitcoin".into(), symbol: "BTC".into() },
+			Currency { blockchain: "FIAT".into(), symbol: "MXN-USD".into() },
+		]);
+
+		assert_eq!(2, c.len());
+
+		assert_eq!(c[1].price, 53712327000);
+
+		assert_eq!(c[1].name, "MXNUSD=X");
+	}
+
+	#[tokio::test]
+	async fn test_update_prices_with_fiat_usd_works() {
+		let mock_api = MockDia::new();
+		let storage = Arc::new(CoinInfoStorage::default());
+		let coins = Arc::clone(&storage);
+
+		let mut all_currencies = HashSet::new();
+		all_currencies
+			.insert(AssetSpecifier { blockchain: "FIAT".into(), symbol: "USD-USD".into() });
+		let all_currencies = Some(all_currencies);
+
+		update_prices(coins, &all_currencies, &mock_api, std::time::Duration::from_secs(1)).await;
+
+		let c = storage.get_currencies_by_blockchains_and_symbols(vec![Currency {
+			blockchain: "FIAT".into(),
+			symbol: "USD-USD".into(),
+		}]);
+
+		assert_eq!(1, c.len());
+
+		assert_eq!(c[0].price, 1000000000000);
+
+		assert_eq!(c[0].name, "USD-X");
 	}
 
 	#[tokio::test]

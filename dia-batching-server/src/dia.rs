@@ -49,6 +49,9 @@ pub struct Asset {
 	pub blockchain: String,
 }
 
+/// Find information on how to use it here: https://docs.diadata.org/documentation/api-1/traditional-finance-data-api-endpoints
+const FOREIGN_QUOTATION_ENDPOINT: &str = "https://api.diadata.org/v1/foreignQuotation/YahooFinance";
+
 const QUOTATION_ENDPOINT: &str = "https://api.diadata.org/v1/assetQuotation";
 /// ### Quotation
 ///
@@ -80,9 +83,9 @@ pub struct Quotation {
 	#[serde(rename(deserialize = "Name"))]
 	pub name: String,
 	#[serde(rename(deserialize = "Address"))]
-	pub address: String,
+	pub address: Option<String>,
 	#[serde(rename(deserialize = "Blockchain"))]
-	pub blockchain: String,
+	pub blockchain: Option<String>,
 	#[serde(rename(deserialize = "Price"))]
 	pub price: Decimal,
 	#[serde(rename(deserialize = "PriceYesterday"))]
@@ -111,6 +114,22 @@ impl Default for Quotation {
 	}
 }
 
+impl Quotation {
+	pub fn get_default_fiat_usd_quotation() -> Self {
+		Self {
+			symbol: "USD-USD".to_string(),
+			name: "USD-X".to_string(),
+			address: None,
+			blockchain: None,
+			price: Decimal::new(1, 0),
+			price_yesterday: Decimal::new(1, 0),
+			volume_yesterday: Decimal::new(0, 0),
+			time: Utc::now(),
+			source: "YahooFinance".to_string(),
+		}
+	}
+}
+
 #[async_trait]
 pub trait DiaApi {
 	async fn get_quotable_assets(
@@ -130,9 +149,19 @@ impl DiaApi for Dia {
 		asset: &QuotedAsset,
 	) -> Result<Quotation, Box<dyn error::Error + Send + Sync>> {
 		let QuotedAsset { asset, volume: _ } = asset;
-		let r =
+
+		if asset.blockchain.to_uppercase() == "FIAT" && asset.symbol.to_uppercase() == "USD-USD" {
+			return Ok(Quotation::get_default_fiat_usd_quotation());
+		}
+
+		let r = if asset.blockchain.to_uppercase() == "FIAT" {
+			// The fiat symbol should be of form `{base}-{target}` (e.g. "MXN-USD") for the API to work
+			let fiat_symbol = asset.symbol.to_uppercase();
+			reqwest::get(&format!("{}/{}", FOREIGN_QUOTATION_ENDPOINT, fiat_symbol)).await?
+		} else {
 			reqwest::get(&format!("{}/{}/{}", QUOTATION_ENDPOINT, asset.blockchain, asset.address))
-				.await?;
+				.await?
+		};
 		let q: Quotation = r.json().await?;
 		Ok(q)
 	}
