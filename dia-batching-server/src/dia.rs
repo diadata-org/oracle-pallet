@@ -32,7 +32,7 @@ pub struct QuotedAsset {
 	#[serde(rename(deserialize = "Asset"))]
 	pub asset: Asset,
 	#[serde(rename(deserialize = "Volume"))]
-	pub volume: Decimal,
+	pub volume: f64,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -170,6 +170,13 @@ impl DiaApi for Dia {
 		&self,
 	) -> Result<Vec<QuotedAsset>, Box<dyn error::Error + Sync + Send>> {
 		let r = reqwest::get(QUOTABLE_ASSETS_ENDPOINT).await?;
-		Ok(r.json().await?)
+		let assets = match r.json::<Vec<QuotedAsset>>().await {
+			Ok(assets) => assets,
+			Err(e) => {
+				log::error!("Failed to parse quotable assets: {}", e);
+				return Err(e.into());
+			},
+		};
+		Ok(assets)
 	}
 }
