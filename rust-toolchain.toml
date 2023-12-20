@@ -1,0 +1,4 @@
+[toolchain]
+channel = "stable-2023-01-10"
+components = ["rustfmt", "rls", "clippy"]
+targets = ["wasm32-unknown-unknown"]
