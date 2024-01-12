@@ -324,6 +324,7 @@ mod tests {
 			Currency { blockchain: "Ethereum".into(), symbol: "ETH".into() },
 			Currency { blockchain: "Ethereum".into(), symbol: "USDT".into() },
 			Currency { blockchain: "Ethereum".into(), symbol: "USDC".into() },
+			Currency { blockchain: "Amplitude".into(), symbol: "AMPE".into() },
 		]);
 
 		assert_eq!(4, c.len());

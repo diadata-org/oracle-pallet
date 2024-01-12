@@ -1,0 +1,6 @@
+query AMPE_price {
+  bundleById(id: "1") {
+    id
+    ethPrice
+  }
+}

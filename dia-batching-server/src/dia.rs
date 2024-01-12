@@ -3,6 +3,7 @@ use chrono::prelude::*;
 use rust_decimal::Decimal;
 use serde::Deserialize;
 use std::error;
+use graphql_client::{reqwest::post_graphql, GraphQLQuery};
 
 const QUOTABLE_ASSETS_ENDPOINT: &str = "https://api.diadata.org/v1/quotedAssets";
 /// ### Quotable Assets
@@ -142,6 +143,22 @@ pub trait DiaApi {
 }
 pub struct Dia;
 
+// The paths are relative to the directory where your `Cargo.toml` is located.
+// Both json and the GraphQL schema language are supported as sources for the schema
+#[derive(GraphQLQuery)]
+#[graphql(
+schema_path = "./resources/schema.graphql",
+query_path = "./resources/ampe_query.graphql",
+response_derives = "Debug"
+)]
+pub struct AmpeView;
+
+fn translate_ampe_query_response(response: graphql_client::Response<ampe_view::ResponseData>) {
+	log::info!("response body\n\n{:?}", response);
+	println!("response body\n\n{:?}", response);
+}
+
+
 #[async_trait]
 impl DiaApi for Dia {
 	async fn get_quotation(
@@ -150,18 +167,36 @@ impl DiaApi for Dia {
 	) -> Result<Quotation, Box<dyn error::Error + Send + Sync>> {
 		let QuotedAsset { asset, volume: _ } = asset;
 
-		if asset.blockchain.to_uppercase() == "FIAT" && asset.symbol.to_uppercase() == "USD-USD" {
-			return Ok(Quotation::get_default_fiat_usd_quotation());
-		}
+		let r = match asset.blockchain.to_uppercase().as_str() {
+			"FIAT" => {
+				if asset.symbol.to_uppercase() == "USD-USD" {
+					return Ok(Quotation::get_default_fiat_usd_quotation());
+				} else {
+					let fiat_symbol = asset.symbol.to_uppercase();
+					reqwest::get(&format!("{}/{}", FOREIGN_QUOTATION_ENDPOINT, fiat_symbol)).await?
+				}
+			}
+			"AMPLITUDE" if asset.symbol.to_uppercase() == "AMPE" => {
+				let url = "https://https://squid.subsquid.io/amplitude-squid/graphql";
+				let variables = ampe_view::Variables {};
 
-		let r = if asset.blockchain.to_uppercase() == "FIAT" {
-			// The fiat symbol should be of form `{base}-{target}` (e.g. "MXN-USD") for the API to work
-			let fiat_symbol = asset.symbol.to_uppercase();
-			reqwest::get(&format!("{}/{}", FOREIGN_QUOTATION_ENDPOINT, fiat_symbol)).await?
-		} else {
-			reqwest::get(&format!("{}/{}/{}", QUOTATION_ENDPOINT, asset.blockchain, asset.address))
-				.await?
+				let client = reqwest::Client::new();
+
+				let response = post_graphql::<AmpeView, _>(&client, url, variables)
+					.await?;
+
+				translate_ampe_query_response(response);
+
+				reqwest::get(&format!("{}/{}/{}", QUOTATION_ENDPOINT, asset.blockchain, asset.address))
+					.await?
+			}
+			_ => {
+				reqwest::get(&format!("{}/{}/{}", QUOTATION_ENDPOINT, asset.blockchain, asset.address))
+					.await?
+			}
 		};
+
+
 		let q: Quotation = r.json().await?;
 		Ok(q)
 	}

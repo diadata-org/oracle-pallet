@@ -28,7 +28,7 @@ pub struct DiaApiArgs {
 	/// Fiat currencies need to have the format FIAT:<from>-<to>
 	#[structopt(short, long,
       parse(from_str = parse_currency_vec),
-      default_value = "Polkadot:DOT,Kusama:KSM,Stellar:XLM,FIAT:USD-USD,FIAT:MXN-USD,FIAT:BRL-USD"
+      default_value = "Polkadot:DOT,Kusama:KSM,Stellar:XLM,FIAT:USD-USD,FIAT:MXN-USD,FIAT:BRL-USD,AMPLITUDE:AMPE"
     )]
 	pub supported_currencies: SupportedCurrencies,
 }
