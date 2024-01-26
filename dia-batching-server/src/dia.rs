@@ -1,9 +1,16 @@
 use async_trait::async_trait;
 use chrono::prelude::*;
+use chrono::DateTime;
+use graphql_client::{GraphQLQuery, Response};
+use reqwest::IntoUrl;
 use rust_decimal::Decimal;
 use serde::Deserialize;
 use std::error;
-use graphql_client::{reqwest::post_graphql, GraphQLQuery};
+use std::error::Error;
+
+type BigInt = u128;
+type JSON = serde_json::Value;
+type Bytes = Vec<u8>;
 
 const QUOTABLE_ASSETS_ENDPOINT: &str = "https://api.diadata.org/v1/quotedAssets";
 /// ### Quotable Assets
@@ -147,17 +154,26 @@ pub struct Dia;
 // Both json and the GraphQL schema language are supported as sources for the schema
 #[derive(GraphQLQuery)]
 #[graphql(
-schema_path = "./resources/schema.graphql",
-query_path = "./resources/ampe_query.graphql",
-response_derives = "Debug"
+	schema_path = "resources/schema.graphql",
+	query_path = "resources/ampe_query.graphql",
+	response_derives = "Debug"
 )]
-pub struct AmpeView;
+pub struct AmpePriceView;
 
-fn translate_ampe_query_response(response: graphql_client::Response<ampe_view::ResponseData>) {
-	log::info!("response body\n\n{:?}", response);
-	println!("response body\n\n{:?}", response);
+impl AmpePriceView {
+	async fn get_price_in_json<U: IntoUrl>(
+		variables: ampe_price_view::Variables,
+		url: U,
+	) -> Result<Response<ampe_price_view::ResponseData>, Box<dyn Error + Send + Sync>> {
+		let request_body = AmpePriceView::build_query(variables);
+
+		let client = reqwest::Client::new();
+		let res = client.post(url).json(&request_body).send().await?;
+		let response_body: Response<ampe_price_view::ResponseData> = res.json().await?;
+
+		Ok(response_body)
+	}
 }
-
 
 #[async_trait]
 impl DiaApi for Dia {
@@ -175,27 +191,28 @@ impl DiaApi for Dia {
 					let fiat_symbol = asset.symbol.to_uppercase();
 					reqwest::get(&format!("{}/{}", FOREIGN_QUOTATION_ENDPOINT, fiat_symbol)).await?
 				}
-			}
+			},
 			"AMPLITUDE" if asset.symbol.to_uppercase() == "AMPE" => {
 				let url = "https://https://squid.subsquid.io/amplitude-squid/graphql";
-				let variables = ampe_view::Variables {};
+				let json_price =
+					AmpePriceView::get_price_in_json(ampe_price_view::Variables {}, url).await?;
 
-				let client = reqwest::Client::new();
+				println!("print the price: {json_price:#?}");
 
-				let response = post_graphql::<AmpeView, _>(&client, url, variables)
-					.await?;
-
-				translate_ampe_query_response(response);
-
-				reqwest::get(&format!("{}/{}/{}", QUOTATION_ENDPOINT, asset.blockchain, asset.address))
-					.await?
-			}
+				reqwest::get(&format!(
+					"{}/{}/{}",
+					QUOTATION_ENDPOINT, asset.blockchain, asset.address
+				))
+				.await?
+			},
 			_ => {
-				reqwest::get(&format!("{}/{}/{}", QUOTATION_ENDPOINT, asset.blockchain, asset.address))
-					.await?
-			}
+				reqwest::get(&format!(
+					"{}/{}/{}",
+					QUOTATION_ENDPOINT, asset.blockchain, asset.address
+				))
+				.await?
+			},
 		};
-
 
 		let q: Quotation = r.json().await?;
 		Ok(q)

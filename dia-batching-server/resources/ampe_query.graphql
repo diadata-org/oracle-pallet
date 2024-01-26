@@ -1,6 +1,5 @@
-query AMPE_price {
+query AmpePriceView{
   bundleById(id: "1") {
-    id
     ethPrice
   }
 }
