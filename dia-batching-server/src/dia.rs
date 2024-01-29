@@ -150,7 +150,7 @@ pub struct Dia;
 // Both json and the GraphQL schema language are supported as sources for the schema
 #[derive(GraphQLQuery)]
 #[graphql(
-	schema_path = "resources/schema.graphql",
+	schema_path = "resources/ampe_schema.graphql",
 	query_path = "resources/ampe_query.graphql",
 	response_derives = "Debug"
 )]
@@ -158,7 +158,7 @@ pub struct AmpePriceView;
 
 impl AmpePriceView {
 	const SYMBOL: &'static str = "AMPE";
-	const BLOCKCHAIN: &'static str = "AMPLITUDE";
+	const BLOCKCHAIN: &'static str = "Amplitude";
 	const URL: &'static str = "https://squid.subsquid.io/amplitude-squid/graphql";
 
 	/// Response:
@@ -188,13 +188,13 @@ impl AmpePriceView {
 
 		Ok(Quotation {
 			symbol: Self::SYMBOL.to_string(),
-			name: "".to_string(),
+			name: Self::BLOCKCHAIN.to_string(),
 			address: None,
 			blockchain: Some(Self::BLOCKCHAIN.to_string()),
 			price,
 			price_yesterday: Default::default(),
 			volume_yesterday: Default::default(),
-			time: Default::default(),
+			time: Utc::now(),
 			source: Self::URL.to_string(),
 		})
 	}
@@ -213,6 +213,7 @@ impl DiaApi for Dia {
 				if asset.symbol.to_uppercase() == "USD-USD" {
 					return Ok(Quotation::get_default_fiat_usd_quotation());
 				} else {
+					// The fiat symbol should be of form `{base}-{target}` (e.g. "MXN-USD") for the API to work
 					let fiat_symbol = asset.symbol.to_uppercase();
 					reqwest::get(&format!("{}/{}", FOREIGN_QUOTATION_ENDPOINT, fiat_symbol)).await?
 				}
@@ -270,5 +271,23 @@ mod tests {
 		assert_eq!(price.symbol, quoted_asset.asset.symbol);
 		assert_eq!(price.blockchain.expect("should return ampe"), quoted_asset.asset.blockchain);
 		assert!(price.price < Decimal::new(1, 0));
+	}
+
+	#[tokio::test]
+	async fn test_fiat_price() {
+		let quoted_asset = QuotedAsset {
+			asset: Asset {
+				symbol: "USD-USD".to_string(),
+				name: "".to_string(),
+				address: "".to_string(),
+				decimals: 0,
+				blockchain: "fiat".to_string(),
+			},
+			volume: 0.0,
+		};
+		let price = Dia.get_quotation(&quoted_asset).await.expect("should return a quotation");
+
+		assert_eq!(price.symbol, quoted_asset.asset.symbol);
+		assert_eq!(price.price, Decimal::new(1, 0));
 	}
 }
