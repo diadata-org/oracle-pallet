@@ -1883,7 +1883,6 @@ dependencies = [
  "rust_decimal",
  "rust_decimal_macros",
  "serde",
- "serde_json",
  "smol_str",
  "structopt",
  "tokio 0.2.25",
