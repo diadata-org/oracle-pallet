@@ -94,7 +94,8 @@ async fn update_prices<T>(
 
 	if let Some(supported_currencies) = maybe_supported_currencies.as_ref() {
 		for asset in supported_currencies.iter() {
-			if asset.blockchain == "FIAT" {
+			// We do support both these 'blockchain' identifiers while DIA doesn't provide data for them
+			if asset.blockchain == "FIAT" || asset.blockchain == "Amplitude" {
 				// Create dummy QuotedAsset. We only need it to have the symbol and blockchain
 				let quoted_asset = QuotedAsset {
 					asset: Asset {
