@@ -7,6 +7,7 @@ type Query {
 }
 
 scalar DateTime
+scalar Decimal
 scalar BigInt
 scalar Bytes
 scalar JSON
@@ -18,7 +19,7 @@ type OraclePrice {
   blockchain: String!
   timestamp: DateTime!
   "BigDecimal"
-  price: String!
+  price: Decimal!
   "BigDecimal"
   supply: String!
   decimals: Int!
@@ -90,7 +91,7 @@ type StableSwapInfo {
   # transactions
   txCount: Int!
 
-  swaps: [StableSwap!]! 
+  swaps: [StableSwap!]!
 }
 
 type StableSwap {
@@ -127,7 +128,7 @@ type StableSwap {
   swapFee: BigInt!
   adminFee: BigInt!
 
-  virtualPrice: BigInt!
+  virtualPrice: Decimal!
 
   stableSwapInfo: StableSwapInfo!
 
@@ -336,9 +337,9 @@ type Pair {
 
   # Price in terms of the asset pair
   "BigDecimal"
-  token0Price: String!
+  token0Price: Decimal!
   "BigDecimal"
-  token1Price: String!
+  token1Price: Decimal!
 
   # lifetime volume stats
   "BigDecimal"
@@ -367,7 +368,7 @@ type Pair {
   pairDayData: [PairDayData!]!
   liquidityPositions: [LiquidityPosition!]!
   liquidityPositionSnapshots: [LiquidityPositionSnapshot!]!
- 
+
   mints: [Mint!]!
   burns: [Burn!]!
   swaps: [Swap!]!
@@ -508,7 +509,7 @@ type Swap {
 type Bundle {
   id: ID!
   "BigDecimal"
-  ethPrice: String! # price of ETH usd
+  ethPrice: Decimal! # price of ETH usd
 }
 
 type FactoryDayData {
@@ -599,7 +600,7 @@ type TokenDayData {
   totalLiquidityUSD: String!
 
   # price stats
-  priceUSD: String!
+  priceUSD: Decimal!
 }
 
 type StableSwapDayData {

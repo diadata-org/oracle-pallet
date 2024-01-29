@@ -2,15 +2,11 @@ use async_trait::async_trait;
 use chrono::prelude::*;
 use chrono::DateTime;
 use graphql_client::{GraphQLQuery, Response};
-use reqwest::IntoUrl;
 use rust_decimal::Decimal;
 use serde::Deserialize;
 use std::error;
 use std::error::Error;
-
-type BigInt = u128;
-type JSON = serde_json::Value;
-type Bytes = Vec<u8>;
+use std::string::ToString;
 
 const QUOTABLE_ASSETS_ENDPOINT: &str = "https://api.diadata.org/v1/quotedAssets";
 /// ### Quotable Assets
@@ -161,17 +157,46 @@ pub struct Dia;
 pub struct AmpePriceView;
 
 impl AmpePriceView {
-	async fn get_price_in_json<U: IntoUrl>(
-		variables: ampe_price_view::Variables,
-		url: U,
-	) -> Result<Response<ampe_price_view::ResponseData>, Box<dyn Error + Send + Sync>> {
-		let request_body = AmpePriceView::build_query(variables);
+	const SYMBOL: &'static str = "AMPE";
+	const BLOCKCHAIN: &'static str = "AMPLITUDE";
+	const URL: &'static str = "https://squid.subsquid.io/amplitude-squid/graphql";
+
+	/// Response:
+	/// ```ignore
+	/// Response {
+	///     data: Some(
+	///         ResponseData {
+	///             bundle_by_id: AmpeViewBundleById {
+	///                 eth_price: 0.003482,
+	///             },
+	///         },
+	///     ),
+	///     errors: None,
+	///     extensions: None,
+	/// }
+	/// ```
+	/// Returns the value of `eth_price`, which is the price of AMPE.
+	async fn get_price() -> Result<Quotation, Box<dyn Error + Send + Sync>> {
+		let request_body = AmpePriceView::build_query(ampe_price_view::Variables {});
 
 		let client = reqwest::Client::new();
-		let res = client.post(url).json(&request_body).send().await?;
-		let response_body: Response<ampe_price_view::ResponseData> = res.json().await?;
+		let response = client.post(Self::URL).json(&request_body).send().await?;
+		let response_body: Response<ampe_price_view::ResponseData> = response.json().await?;
 
-		Ok(response_body)
+		let response_data = response_body.data.ok_or("No price found for AMPE")?;
+		let price = response_data.bundle_by_id.eth_price;
+
+		Ok(Quotation {
+			symbol: Self::SYMBOL.to_string(),
+			name: "".to_string(),
+			address: None,
+			blockchain: Some(Self::BLOCKCHAIN.to_string()),
+			price,
+			price_yesterday: Default::default(),
+			volume_yesterday: Default::default(),
+			time: Default::default(),
+			source: Self::URL.to_string(),
+		})
 	}
 }
 
@@ -192,18 +217,8 @@ impl DiaApi for Dia {
 					reqwest::get(&format!("{}/{}", FOREIGN_QUOTATION_ENDPOINT, fiat_symbol)).await?
 				}
 			},
-			"AMPLITUDE" if asset.symbol.to_uppercase() == "AMPE" => {
-				let url = "https://https://squid.subsquid.io/amplitude-squid/graphql";
-				let json_price =
-					AmpePriceView::get_price_in_json(ampe_price_view::Variables {}, url).await?;
-
-				println!("print the price: {json_price:#?}");
-
-				reqwest::get(&format!(
-					"{}/{}/{}",
-					QUOTATION_ENDPOINT, asset.blockchain, asset.address
-				))
-				.await?
+			"AMPLITUDE" if asset.symbol.to_uppercase() == AmpePriceView::SYMBOL => {
+				return AmpePriceView::get_price().await
 			},
 			_ => {
 				reqwest::get(&format!(
@@ -230,5 +245,30 @@ impl DiaApi for Dia {
 			},
 		};
 		Ok(assets)
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use crate::dia::{AmpePriceView, Asset, Dia, DiaApi, QuotedAsset};
+	use rust_decimal::Decimal;
+
+	#[tokio::test]
+	async fn test_ampe_price() {
+		let quoted_asset = QuotedAsset {
+			asset: Asset {
+				symbol: AmpePriceView::SYMBOL.to_string(),
+				name: "".to_string(),
+				address: "".to_string(),
+				decimals: 0,
+				blockchain: AmpePriceView::BLOCKCHAIN.to_string(),
+			},
+			volume: 0.0,
+		};
+		let price = Dia.get_quotation(&quoted_asset).await.expect("should return a quotation");
+
+		assert_eq!(price.symbol, quoted_asset.asset.symbol);
+		assert_eq!(price.blockchain.expect("should return ampe"), quoted_asset.asset.blockchain);
+		assert!(price.price < Decimal::new(1, 0));
 	}
 }
