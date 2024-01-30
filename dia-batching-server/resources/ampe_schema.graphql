@@ -1,0 +1,15 @@
+schema {
+  query: Query
+}
+
+type Query {
+  bundleById(id:ID!):Bundle!
+}
+
+scalar Decimal
+
+type Bundle {
+  id: ID!
+  "BigDecimal"
+  ethPrice: Decimal! # price of ETH usd
+}

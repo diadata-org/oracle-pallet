@@ -1,8 +1,12 @@
 use async_trait::async_trait;
 use chrono::prelude::*;
+use chrono::DateTime;
+use graphql_client::{GraphQLQuery, Response};
 use rust_decimal::Decimal;
 use serde::Deserialize;
 use std::error;
+use std::error::Error;
+use std::string::ToString;
 
 const QUOTABLE_ASSETS_ENDPOINT: &str = "https://api.diadata.org/v1/quotedAssets";
 /// ### Quotable Assets
@@ -142,6 +146,60 @@ pub trait DiaApi {
 }
 pub struct Dia;
 
+// The paths are relative to the directory where your `Cargo.toml` is located.
+// Both json and the GraphQL schema language are supported as sources for the schema
+#[derive(GraphQLQuery)]
+#[graphql(
+	schema_path = "resources/ampe_schema.graphql",
+	query_path = "resources/ampe_query.graphql",
+	response_derives = "Debug"
+)]
+pub struct AmpePriceView;
+
+impl AmpePriceView {
+	const SYMBOL: &'static str = "AMPE";
+	const BLOCKCHAIN: &'static str = "Amplitude";
+	const URL: &'static str = "https://squid.subsquid.io/amplitude-squid/graphql";
+
+	/// Response:
+	/// ```ignore
+	/// Response {
+	///     data: Some(
+	///         ResponseData {
+	///             bundle_by_id: AmpeViewBundleById {
+	///                 eth_price: 0.003482,
+	///             },
+	///         },
+	///     ),
+	///     errors: None,
+	///     extensions: None,
+	/// }
+	/// ```
+	/// Returns the value of `eth_price`, which is the price of AMPE.
+	async fn get_price() -> Result<Quotation, Box<dyn Error + Send + Sync>> {
+		let request_body = AmpePriceView::build_query(ampe_price_view::Variables {});
+
+		let client = reqwest::Client::new();
+		let response = client.post(Self::URL).json(&request_body).send().await?;
+		let response_body: Response<ampe_price_view::ResponseData> = response.json().await?;
+
+		let response_data = response_body.data.ok_or("No price found for AMPE")?;
+		let price = response_data.bundle_by_id.eth_price;
+
+		Ok(Quotation {
+			symbol: Self::SYMBOL.to_string(),
+			name: Self::BLOCKCHAIN.to_string(),
+			address: None,
+			blockchain: Some(Self::BLOCKCHAIN.to_string()),
+			price,
+			price_yesterday: Default::default(),
+			volume_yesterday: Default::default(),
+			time: Utc::now(),
+			source: Self::URL.to_string(),
+		})
+	}
+}
+
 #[async_trait]
 impl DiaApi for Dia {
 	async fn get_quotation(
@@ -150,18 +208,28 @@ impl DiaApi for Dia {
 	) -> Result<Quotation, Box<dyn error::Error + Send + Sync>> {
 		let QuotedAsset { asset, volume: _ } = asset;
 
-		if asset.blockchain.to_uppercase() == "FIAT" && asset.symbol.to_uppercase() == "USD-USD" {
-			return Ok(Quotation::get_default_fiat_usd_quotation());
-		}
-
-		let r = if asset.blockchain.to_uppercase() == "FIAT" {
-			// The fiat symbol should be of form `{base}-{target}` (e.g. "MXN-USD") for the API to work
-			let fiat_symbol = asset.symbol.to_uppercase();
-			reqwest::get(&format!("{}/{}", FOREIGN_QUOTATION_ENDPOINT, fiat_symbol)).await?
-		} else {
-			reqwest::get(&format!("{}/{}/{}", QUOTATION_ENDPOINT, asset.blockchain, asset.address))
+		let r = match asset.blockchain.to_uppercase().as_str() {
+			"FIAT" => {
+				if asset.symbol.to_uppercase() == "USD-USD" {
+					return Ok(Quotation::get_default_fiat_usd_quotation());
+				} else {
+					// The fiat symbol should be of form `{base}-{target}` (e.g. "MXN-USD") for the API to work
+					let fiat_symbol = asset.symbol.to_uppercase();
+					reqwest::get(&format!("{}/{}", FOREIGN_QUOTATION_ENDPOINT, fiat_symbol)).await?
+				}
+			},
+			"AMPLITUDE" if asset.symbol.to_uppercase() == AmpePriceView::SYMBOL => {
+				return AmpePriceView::get_price().await
+			},
+			_ => {
+				reqwest::get(&format!(
+					"{}/{}/{}",
+					QUOTATION_ENDPOINT, asset.blockchain, asset.address
+				))
 				.await?
+			},
 		};
+
 		let q: Quotation = r.json().await?;
 		Ok(q)
 	}
@@ -178,5 +246,48 @@ impl DiaApi for Dia {
 			},
 		};
 		Ok(assets)
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use crate::dia::{AmpePriceView, Asset, Dia, DiaApi, QuotedAsset};
+	use rust_decimal::Decimal;
+
+	#[tokio::test]
+	async fn test_ampe_price() {
+		let quoted_asset = QuotedAsset {
+			asset: Asset {
+				symbol: AmpePriceView::SYMBOL.to_string(),
+				name: "".to_string(),
+				address: "".to_string(),
+				decimals: 0,
+				blockchain: AmpePriceView::BLOCKCHAIN.to_string(),
+			},
+			volume: 0.0,
+		};
+		let price = Dia.get_quotation(&quoted_asset).await.expect("should return a quotation");
+
+		assert_eq!(price.symbol, quoted_asset.asset.symbol);
+		assert_eq!(price.blockchain.expect("should return ampe"), quoted_asset.asset.blockchain);
+		assert!(price.price < Decimal::new(1, 0));
+	}
+
+	#[tokio::test]
+	async fn test_fiat_price() {
+		let quoted_asset = QuotedAsset {
+			asset: Asset {
+				symbol: "USD-USD".to_string(),
+				name: "".to_string(),
+				address: "".to_string(),
+				decimals: 0,
+				blockchain: "fiat".to_string(),
+			},
+			volume: 0.0,
+		};
+		let price = Dia.get_quotation(&quoted_asset).await.expect("should return a quotation");
+
+		assert_eq!(price.symbol, quoted_asset.asset.symbol);
+		assert_eq!(price.price, Decimal::new(1, 0));
 	}
 }

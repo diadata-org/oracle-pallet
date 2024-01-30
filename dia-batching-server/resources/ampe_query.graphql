@@ -1,0 +1,5 @@
+query AmpePriceView{
+  bundleById(id: "1") {
+    ethPrice
+  }
+}

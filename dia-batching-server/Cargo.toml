@@ -11,6 +11,8 @@ async-trait = "0.1.51"
 
 chrono = {version = "0.4.19", features = ["serde"] }
 
+graphql_client = { version = "0.13.0", features = ["reqwest"]}
+
 log = "0.4.14"
 
 pretty_env_logger = "0.4.0"
